@@ -22,13 +22,13 @@ namespace FriendliesAI
                     return (MobConfig)null;
                 return new MobConfig()
                 {
-                    PostTameConsumables = GrootConfig.PostTameConsumables.Select<string, ItemDrop>((Func<string, ItemDrop>)(i => ObjectDB.instance.GetAllItems(ItemDrop.ItemData.ItemType.Material, i).FirstOrDefault<ItemDrop>())),
+                    //PostTameConsumables = GrootConfig.PostTameConsumables.Select<string, ItemDrop>((Func<string, ItemDrop>)(i => ObjectDB.instance.GetAllItems(ItemDrop.ItemData.ItemType.Material, i).FirstOrDefault<ItemDrop>())),
                     PostTameFeedDuration = (float)GrootConfig.PostTameFeedDuration.Value,
-                    PreTameConsumables = GrootConfig.PreTameConsumables.Select<string, ItemDrop>((Func<string, ItemDrop>)(i => ObjectDB.instance.GetAllItems(ItemDrop.ItemData.ItemType.Material, i).FirstOrDefault<ItemDrop>())),
+                    //PreTameConsumables = GrootConfig.PreTameConsumables.Select<string, ItemDrop>((Func<string, ItemDrop>)(i => ObjectDB.instance.GetAllItems(ItemDrop.ItemData.ItemType.Material, i).FirstOrDefault<ItemDrop>())),
                     PreTameFeedDuration = (float)GrootConfig.PreTameFeedDuration.Value,
                     TamingTime = (float)GrootConfig.TamingTime.Value,
                     AIType = "Fixer",
-                    AIConfig = JsonUtility.ToJson(new FixerAIConfig()
+                    AIConfig = JsonUtility.ToJson((object)new FixerAIConfig()
                     {
                         AssignmentSearchRadius = GrootConfig.AssignmentSearchRadius.Value,
                         ContainerSearchRadius = GrootConfig.ContainerSearchRadius.Value,
@@ -42,15 +42,22 @@ namespace FriendliesAI
             }
             return new MobConfig()
             {
-                PostTameConsumables = NpcConfig.PostTameConsumables.Select<string, ItemDrop>((Func<string, ItemDrop>)(i => ObjectDB.instance.GetAllItems(ItemDrop.ItemData.ItemType.Material, i).FirstOrDefault<ItemDrop>())),
-                PostTameFeedDuration = (float)NpcConfig.PostTameFeedDuration.Value,
-                PreTameConsumables = NpcConfig.PreTameConsumables.Select<string, ItemDrop>((Func<string, ItemDrop>)(i => ObjectDB.instance.GetAllItems(ItemDrop.ItemData.ItemType.Material, i).FirstOrDefault<ItemDrop>())),
-                PreTameFeedDuration = (float)NpcConfig.PreTameFeedDuration.Value,
+                //PostTameConsumables = NpcConfig.PostTameConsumables.Select<string, ItemDrop>((Func<string, ItemDrop>)(i => ObjectDB.instance.GetAllItems(ItemDrop.ItemData.ItemType.Material, i).FirstOrDefault<ItemDrop>())),
+                PostTameFeedDuration = (float)NpcConfig.FeedDuration.Value,
+                //PreTameConsumables = NpcConfig.PreTameConsumables.Select<string, ItemDrop>((Func<string, ItemDrop>)(i => ObjectDB.instance.GetAllItems(ItemDrop.ItemData.ItemType.Material, i).FirstOrDefault<ItemDrop>())),
+                PreTameFeedDuration = (float)NpcConfig.FeedDuration.Value,
                 TamingTime = (float)NpcConfig.TamingTime.Value,
-                AIType = "Test",
-                AIConfig = JsonUtility.ToJson(new testConfig()
+                AIType = "Worker",
+                AIConfig = JsonUtility.ToJson((object)new WorkerAIConfig()
                 {
-                    InteractRange = NpcConfig.InteractionRange.Value
+                    AssignmentSearchRadius = NpcConfig.AssignmentSearchRadius.Value,
+                    ContainerSearchRadius = NpcConfig.ContainerSearchRadius.Value,
+                    FeedDuration = NpcConfig.FeedDuration.Value,
+                    IncludedContainers = NpcConfig.IncludedContainersList.Value.Split(','),
+                    ItemSearchRadius = NpcConfig.ItemSearchRadius.Value,
+                    MaxContainersInMemory = NpcConfig.MaxContainersInMemory.Value,
+                    TimeBeforeAssignmentCanBeRepeated = NpcConfig.TimeBeforeAssignmentCanBeRepeated.Value,
+                    TimeLimitOnAssignment = NpcConfig.TimeLimitOnAssignment.Value
                 })
             };
         }

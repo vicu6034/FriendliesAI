@@ -74,12 +74,17 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Behaviors\FightBehavior.cs" />
+    <Compile Include="Behaviors\SearchForItemsBehavior.cs" />
     <Compile Include="grootConfig.cs" />
     <Compile Include="MobConfig.cs" />
     <Compile Include="MobConfigManager.cs" />
+    <Compile Include="NpcAI.cs" />
+    <Compile Include="NpcAIConfig.cs" />
     <Compile Include="npcConfig.cs" />
     <Compile Include="Plugin.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

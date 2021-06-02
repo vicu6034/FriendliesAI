@@ -28,7 +28,10 @@ namespace FriendliesAI
         {
             Plugin.log = this.Logger;
             NpcConfig.Init(this.Config);
-            GrootConfig.Init(this.Config);
+            GrootConfig.Init(this.Config); 
+            Type npcAI = new NpcAI().GetType();
+            MobManager.RegisterMobAI(npcAI);
+            //Debug.Log(MobManager.GetRegisteredMobAIs());
             Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly());  
         }
 

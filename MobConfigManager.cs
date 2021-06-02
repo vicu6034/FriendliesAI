@@ -22,6 +22,7 @@ namespace FriendliesAI
                     return (MobConfig)null;
                 return new MobConfig()
                 {
+                    /*
                     //PostTameConsumables = GrootConfig.PostTameConsumables.Select<string, ItemDrop>((Func<string, ItemDrop>)(i => ObjectDB.instance.GetAllItems(ItemDrop.ItemData.ItemType.Material, i).FirstOrDefault<ItemDrop>())),
                     PostTameFeedDuration = (float)GrootConfig.PostTameFeedDuration.Value,
                     //PreTameConsumables = GrootConfig.PreTameConsumables.Select<string, ItemDrop>((Func<string, ItemDrop>)(i => ObjectDB.instance.GetAllItems(ItemDrop.ItemData.ItemType.Material, i).FirstOrDefault<ItemDrop>())),
@@ -37,6 +38,12 @@ namespace FriendliesAI
                         ItemSearchRadius = GrootConfig.ItemSearchRadius.Value,
                         MaxContainersInMemory = GrootConfig.MaxContainersInMemory.Value,
                         TimeLimitOnAssignment = GrootConfig.TimeLimitOnAssignment.Value
+                    })
+                    */
+                    AIType = "NpcAI",
+                    AIConfig = JsonUtility.ToJson((object)new NpcAIConfig()
+                    {
+                        InteractRange = 1
                     })
                 };
             }

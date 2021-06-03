@@ -10,7 +10,7 @@ namespace FriendliesAI
         public static bool IsControllableMob(string mobType)
         {
             string prefabName = Common.GetPrefabName(mobType);
-            return prefabName == "RRRN_Tester" || prefabName == "Groot";
+            return prefabName == "RRRN_Tester" || prefabName == "RRRN_Tester2";
         }
 
         public static MobConfig GetMobConfig(string mobType)
@@ -18,7 +18,7 @@ namespace FriendliesAI
             string prefabName = Common.GetPrefabName(mobType);
             if (!(prefabName == "RRRN_Tester"))
             {
-                if (!(prefabName == "Groot"))
+                if (!(prefabName == "RRRN_Tester2"))
                     return (MobConfig)null;
                 return new MobConfig()
                 {

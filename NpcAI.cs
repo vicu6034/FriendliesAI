@@ -82,6 +82,9 @@ namespace FriendliesAI
             this.RegisterRPCMethods();
             this.UpdateTrigger = this.Brain.SetTriggerParameters<(MonsterAI, float)>("Update");
             this.LookForItemTrigger = this.Brain.SetTriggerParameters<IEnumerable<ItemDrop.ItemData>, string, string>("ItemFound");
+            this.m_assignmentA = new MaxStack<Assignment>(this.Intelligence);
+            this.m_containers = new MaxStack<Container>(this.Intelligence);
+            this.m_carrying = null;
             this.searchForItemsBehaviour = new SearchForItemsBehaviour();
             this.searchForItemsBehaviour.Configure((MobAIBase)this, this.Brain, "SearchForItems");
             this.fightBehaviour = new FightBehaviour();
@@ -94,6 +97,7 @@ namespace FriendliesAI
             this.eatingBehaviour.SuccessState = "Idle";
             this.eatingBehaviour.FailState = "Idle";
             this.eatingBehaviour.HealPercentageOnConsume = 0.1f;
+            this.m_trainedAssignments.AddRange((IEnumerable<string>)this.NView.GetZDO().GetString("RR_trainedAssignments").Split());
             this.ConfigureRoot();
             this.ConfigureIdle();
             this.ConfigureFollow();
@@ -104,8 +108,7 @@ namespace FriendliesAI
             this.ConfigureHungry();
             this.ConfigureWorkerAssigned();
             this.ConfigureMoveToWorkerAssignment();
-            this.ConfigureWorkerAssigned();
-            this.ConfigureCheckWorkerAssignment();
+            this.ConfigureCheckingWorkerAssignment();
             this.ConfigureDoneWithWorkerAssignment();
             this.ConfigureUnloadToWorkerAssignment();
             StateGraph stateGraph = new StateGraph(this.Brain.GetInfo());
@@ -139,8 +142,9 @@ namespace FriendliesAI
         
         private void ConfigureHungry() => this.Brain.Configure("Hungry").SubstateOf("Root");
 
-        private void ConfigureIdle() => this.Brain.Configure("Idle").SubstateOf("Root").PermitIf("Hungry", this.eatingBehaviour.StartState, (Func<bool>)(() => this.eatingBehaviour.IsHungry(this.IsHurt))).PermitIf<(MonsterAI, float)>(this.UpdateTrigger, "Assigned", (Func<(MonsterAI, float), bool>)(arg =>
-        {
+        private void ConfigureIdle() => this.Brain.Configure("Idle").SubstateOf("Root").PermitIf("Hungry", this.eatingBehaviour.StartState, (Func<bool>)(() => this.eatingBehaviour.IsHungry(this.IsHurt)))
+            .PermitIf<(MonsterAI, float)>(this.UpdateTrigger, "Assigned", (Func<(MonsterAI, float), bool>)(arg =>
+            {
             if ((double)(this.m_stuckInIdleTimer += 1) > 300.0)
             {
                 Common.Dbgl("m_startPosition = HomePosition");
@@ -151,18 +155,18 @@ namespace FriendliesAI
                 return false;
             this.m_searchForNewAssignmentTimer = 0.0f;
             return this.AddNewAssignment(arg.Item1.transform.position);
-        })).PermitIf<(MonsterAI, float)>(this.UpdateTrigger, "WorkerAssigned", (Func<(MonsterAI, float), bool>)(arg =>
-        {
-            if ((double)(this.m_searchForNewAssignmentTimer += arg.Item2) < 2.0)
-                return false;
-            this.m_searchForNewAssignmentTimer = 0.0f;
-            return this.AddNewWorkerAssignment((BaseAI)arg.Item1, this.m_assignmentA);
-        })).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
-        {
-            this.UpdateAiStatus("Nothing to do, bored");
-            this.m_stuckInIdleTimer = 0.0f;
-            this.m_startPosition = this.Instance.transform.position;
-        }));
+            })).PermitIf<(MonsterAI, float)>(this.UpdateTrigger, "WorkerAssigned", (Func<(MonsterAI, float), bool>)(arg =>
+            {
+                if ((double)(this.m_searchForNewAssignmentTimer += arg.Item2) < 2.0)
+                    return false;
+                this.m_searchForNewAssignmentTimer = 0.0f;
+                return this.AddNewWorkerAssignment((BaseAI)arg.Item1, this.m_assignmentA);
+            })).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+            {
+                this.UpdateAiStatus("Nothing to do, bored");
+                this.m_stuckInIdleTimer = 0.0f;
+                this.m_startPosition = this.Instance.transform.position;
+            }));
 
         private void ConfigureFight() => this.Brain.Configure("Fight").SubstateOf("Root").Permit("Fight", this.fightBehaviour.StartState).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
         {
@@ -211,7 +215,7 @@ namespace FriendliesAI
             this.searchForItemsBehaviour.KnownContainers = this.m_containers;
             this.searchForItemsBehaviour.Items = t.Parameters[0] as IEnumerable<ItemDrop.ItemData>; 
             //this.searchForItemsBehaviour.AcceptedContainerNames = this.m_config.IncludedContainers;
-            this.searchForItemsBehaviour.AcceptedContainerNames = new String[0];
+            this.searchForItemsBehaviour.AcceptedContainerNames = new string[1]{"Chest"};
             this.searchForItemsBehaviour.SuccessState = t.Parameters[1] as string;
             this.searchForItemsBehaviour.FailState = t.Parameters[2] as string;
             this.Brain.Fire("SearchForItems".ToString());
@@ -356,7 +360,7 @@ namespace FriendliesAI
 
         private void ConfigureWorkerAssigned()
         {
-            this.Brain.Configure("WorkerAssigned").SubstateOf("Idle").InitialTransition("MoveToWorkerAssignment").PermitIf("TakeDamage", "Fight", (Func<bool>)(() => (double)this.TimeSinceHurt < 20.0)).PermitIf("Follow", "Follow", (Func<bool>)(() => (bool)(UnityEngine.Object)(this.Instance as MonsterAI).GetFollowTarget())).PermitIf("Hungry", this.eatingBehaviour.StartState, (Func<bool>)(() => this.eatingBehaviour.IsHungry(this.IsHurt))).Permit("WorkerAssignmentTimedOut", "DoneWithWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+            this.Brain.Configure("WorkerAssigned").SubstateOf("Idle").InitialTransition("MoveToWorkerAssignment").PermitIf("TakeDamage", "Fight", (Func<bool>)(() => (double)this.TimeSinceHurt < 20.0)).PermitIf("Follow", "Follow", (Func<bool>)(() => (bool)(UnityEngine.Object)(this.Instance as MonsterAI).GetFollowTarget())).PermitIf("Hungry", this.eatingBehaviour.StartState, (Func<bool>)(() => this.eatingBehaviour.IsHungry(this.IsHurt))).Permit("AssignmentTimedOut", "DoneWithWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
             {
                 this.UpdateAiStatus("I'm on it Boss");
                 this.m_assignedTimer = 0.0f;
@@ -386,14 +390,14 @@ namespace FriendliesAI
             {
                 this.UpdateAiStatus("Moving to assignment " + this.m_assignmentA.Peek().TypeOfAssignment.Name);
                 this.m_closeEnoughTimer = 0.0f;
-                if (t.Source == "HaveWorkerAssignmentItem")
+                if (t.Source == "HaveAssignmentItem")
                     nextState = "UnloadToWorkerAssignment";
                 else
                     nextState = "CheckingWorkerAssignment";
             }));
         }
 
-        private void ConfigureCheckWorkerAssignment() => this.Brain.Configure("CheckingWorkerAssignment").SubstateOf("WorkerAssigned").Permit(this.LookForItemTrigger.Trigger, "SearchForItems").Permit("WorkerAssignmentFinished", "DoneWithWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+        private void ConfigureCheckingWorkerAssignment() => this.Brain.Configure("CheckingWorkerAssignment").SubstateOf("WorkerAssigned").Permit(this.LookForItemTrigger.Trigger, "SearchForItems").Permit("WorkerAssignmentFinished", "DoneWithWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
         {
             this.StopMoving();
             this.UpdateAiStatus("Checking assignment for task");
@@ -632,7 +636,6 @@ namespace FriendliesAI
             public const string IsCloseToWorkerAssignment = "IsCloseToWorkerAssignment";
             public const string WorkerAssignmentFinished = "WorkerAssignmentFinished";
             public const string LeaveWorkerAssignment = "LeaveWorkerAssignment";
-            public const string WorkerAssignmentTimedOut = "WorkerAssignmentTimedOut";
         }
     }
 }

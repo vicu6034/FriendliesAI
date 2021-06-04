@@ -20,7 +20,7 @@ namespace FriendliesAI
 
         public static void Init(ConfigFile Config)
         {
-            TamingItemList = Config.Bind<string>("General", "Npc_TamingItemList", "SilverNecklace", "Comma separated list if items used to tame NPCs");
+            TamingItemList = Config.Bind<string>("General", "Npc_TamingItemList", "Gold", "Comma separated list if items used to tame NPCs");
             FeedDuration = Config.Bind<int>("General", "Npc_FeedDuration", 500, "Time before getting hungry after consuming one item");
             TamingTime = Config.Bind<int>("General", "Npc_TamingTime", 1000, "Total time it takes to tame an NPC");
             AssignmentSearchRadius = Config.Bind<int>("General", "Npc_AssignmentSearchRadius", 30, "Radius to search for new assignments within");
@@ -31,7 +31,7 @@ namespace FriendliesAI
             TimeBeforeAssignmentCanBeRepeated = Config.Bind<int>("General", "Npc_TimeBeforeAssignmentCanBeRepeated", 120, "How long before assignment can be done again");
             TimeLimitOnAssignment = Config.Bind<int>("General", "Npc_TimeLimitOnAssignment", 60, "How long before moving on to next assignment");
             PreTameConsumables = (IEnumerable<string>)NpcConfig.TamingItemList.Value.Split(',');
-            PostTameConsumables = (IEnumerable<string>)"Resin".Split(',');
+            PostTameConsumables = (IEnumerable<string>)"CookedMeat".Split(',');
         }
     }
 }

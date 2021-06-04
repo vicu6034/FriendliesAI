@@ -8,6 +8,7 @@ using System.Reflection;
 using Stateless.Graph;
 using FriendliesAI.Behaviors;
 using HarmonyLib;
+using Random = System.Random;
 
 namespace FriendliesAI
 {
@@ -28,6 +29,7 @@ namespace FriendliesAI
         private float m_stuckInIdleTimer;
         public Vector3 m_startPosition;
         private readonly StateMachine<string, string>.TriggerWithParameters<(MonsterAI instance, float dt)> UpdateTrigger;
+        //private readonly StateMachine<string, string>.TriggerWithParameters<(MonsterAI instance, float dt)> workerUpdateTrigger;
         private readonly StateMachine<string, string>.TriggerWithParameters<IEnumerable<ItemDrop.ItemData>, string, string> LookForItemTrigger;
         private readonly SearchForItemsBehaviour searchForItemsBehaviour;
         private readonly FightBehaviour fightBehaviour;
@@ -80,6 +82,7 @@ namespace FriendliesAI
                 }
             }
             this.RegisterRPCMethods();
+            this.RegisterWorkerRPCMethods();
             this.UpdateTrigger = this.Brain.SetTriggerParameters<(MonsterAI, float)>("Update");
             this.LookForItemTrigger = this.Brain.SetTriggerParameters<IEnumerable<ItemDrop.ItemData>, string, string>("ItemFound");
             this.m_assignmentA = new MaxStack<Assignment>(this.Intelligence);
@@ -92,7 +95,7 @@ namespace FriendliesAI
             this.eatingBehaviour = new EatingBehaviour();
             this.eatingBehaviour.Configure((MobAIBase)this, this.Brain, "Hungry");
             //this.eatingBehaviour.HungryTimeout = (float)this.m_config.PostTameFeedDuration;
-            this.eatingBehaviour.HungryTimeout = 300f;
+            this.eatingBehaviour.HungryTimeout = 500f;
             this.eatingBehaviour.SearchForItemsState = "SearchForItems";
             this.eatingBehaviour.SuccessState = "Idle";
             this.eatingBehaviour.FailState = "Idle";
@@ -106,11 +109,6 @@ namespace FriendliesAI
             this.ConfigureFlee();
             this.ConfigureFight();
             this.ConfigureHungry();
-            this.ConfigureWorkerAssigned();
-            this.ConfigureMoveToWorkerAssignment();
-            this.ConfigureCheckingWorkerAssignment();
-            this.ConfigureDoneWithWorkerAssignment();
-            this.ConfigureUnloadToWorkerAssignment();
             StateGraph stateGraph = new StateGraph(this.Brain.GetInfo());
         }
 
@@ -133,6 +131,15 @@ namespace FriendliesAI
             }
         }));
 
+        private void RegisterWorkerRPCMethods() => this.NView.Register<string, string>("RR_updateTrainedAssignments", (Action<long, string, string>)((source, uniqueID, trainedAssignments) =>
+        {
+            if (this.NView.IsOwner() || !(this.UniqueID == uniqueID))
+                return;
+            this.m_trainedAssignments.Clear();
+            this.m_trainedAssignments.AddRange((IEnumerable<string>)trainedAssignments.Split());
+            Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, "A worker learned a new skill.", 0, (Sprite)null);
+        }));
+
         private void ConfigureRoot() => this.Brain.Configure("Root").InitialTransition("Idle").PermitIf("TakeDamage", "Fight", (Func<bool>)(() =>
         {
             if (this.Brain.IsInState("Fight"))
@@ -145,22 +152,25 @@ namespace FriendliesAI
         private void ConfigureIdle() => this.Brain.Configure("Idle").SubstateOf("Root").PermitIf("Hungry", this.eatingBehaviour.StartState, (Func<bool>)(() => this.eatingBehaviour.IsHungry(this.IsHurt)))
             .PermitIf<(MonsterAI, float)>(this.UpdateTrigger, "Assigned", (Func<(MonsterAI, float), bool>)(arg =>
             {
-            if ((double)(this.m_stuckInIdleTimer += 1) > 300.0)
-            {
-                Common.Dbgl("m_startPosition = HomePosition");
-                this.m_startPosition = this.HomePosition;
-                this.m_stuckInIdleTimer = 0.0f;
-            }
-            if ((double)(this.m_searchForNewAssignmentTimer += arg.Item2) < 2.0)
-                return false;
-            this.m_searchForNewAssignmentTimer = 0.0f;
-            return this.AddNewAssignment(arg.Item1.transform.position);
-            })).PermitIf<(MonsterAI, float)>(this.UpdateTrigger, "WorkerAssigned", (Func<(MonsterAI, float), bool>)(arg =>
-            {
-                if ((double)(this.m_searchForNewAssignmentTimer += arg.Item2) < 2.0)
+                if ((double) (this.m_stuckInIdleTimer += 1) > 300.0)
+                {
+                    Common.Dbgl("m_startPosition = HomePosition");
+                    this.m_startPosition = this.HomePosition;
+                    this.m_stuckInIdleTimer = 0.0f;
+                }
+
+                if ((double) (this.m_searchForNewAssignmentTimer += arg.Item2) < 2.0)
                     return false;
                 this.m_searchForNewAssignmentTimer = 0.0f;
-                return this.AddNewWorkerAssignment((BaseAI)arg.Item1, this.m_assignmentA);
+                Random rand = new Random();
+                if (rand.Next(0, 2) == 0)
+                {
+                    return this.AddNewAssignment(arg.Item1.transform.position);
+                }
+                else
+                {
+                    return this.AddNewWorkerAssignment((BaseAI) arg.Item1, this.m_assignmentA);
+                }
             })).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
             {
                 this.UpdateAiStatus("Nothing to do, bored");
@@ -223,8 +233,14 @@ namespace FriendliesAI
         
         private void ConfigureAssigned()
         {
-            this.Brain.Configure("Assigned").SubstateOf("Idle").InitialTransition("MoveToAssignment").Permit("AssignmentTimedOut", "Idle").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+            this.Brain.Configure("Assigned").SubstateOf("Idle").InitialTransition("MoveToAssignment").Permit("HasWorkerTasks", "WorkerAssigned").Permit("AssignmentTimedOut", "Idle").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
             {
+                if (!(this.m_assignmentA.Peek() == null))
+                {
+                    this.m_assignedTimer = 0;
+                    this.UpdateAiStatus("Switching to WorkerAI");
+                    this.Brain.Fire("HasWorkerTasks");
+                }
                 this.UpdateAiStatus("Looking for broken structures");
                 this.m_assignedTimer = 0.0f;
             }));
@@ -255,11 +271,21 @@ namespace FriendliesAI
                 {
                     this.NView.InvokeRPC(ZNetView.Everybody, "RR_AddAssignment", (object)this.m_assignment.Peek().GetUniqueId());
                     WearNTear component = this.m_assignment.Peek().GetComponent<WearNTear>();
-                    if ((component != null ? (double)component.GetHealthPercentage() : 1.0) < 0.899999976158142)
+                    if (component == null)
+                    {
+                        this.Brain.Fire("Failed");
+                        this.m_assignment.Pop();
+                    }
+                    else if ((double)component.GetHealthPercentage() <= 0.95)
                     {
                         this.UpdateAiStatus("Hm, this needs fixing!");
                         this.m_startPosition = this.Instance.transform.position;
                         this.Brain.Fire("RepairNeeded");
+                    }
+                    else if (component.GetHealthPercentage() > 0.95)
+                    {
+                        this.UpdateAiStatus("The " + this.m_assignment.Peek().m_name + " does not need to be repaired yet");
+                        this.Brain.Fire("Failed");
                     }
                     else
                     {
@@ -316,11 +342,108 @@ namespace FriendliesAI
                 this.m_stuckInIdleTimer = 0.0f;
                 Debug.LogWarning((object)("Trigger:" + t.Trigger));
                 Piece piece = this.m_assignment.Peek();
-                this.UpdateAiStatus("Dis " + this.m_assignment.Peek().m_name + " is good as new!");
+                this.UpdateAiStatus("This " + this.m_assignment.Peek().m_name + " is good as new!");
                 WearNTear component = piece.GetComponent<WearNTear>();
                 if (!(bool)(UnityEngine.Object)component || !component.Repair())
                     return;
                 piece.m_placeEffect.Create(piece.transform.position, piece.transform.rotation);
+            }));
+            this.Brain.Configure("WorkerAssigned").SubstateOf("Assigned").InitialTransition("MoveToWorkerAssignment").PermitIf("TakeDamage", "Fight", (Func<bool>)(() => (double)this.TimeSinceHurt < 20.0)).PermitIf("Follow", "Follow", (Func<bool>)(() => (bool)(UnityEngine.Object)(this.Instance as MonsterAI).GetFollowTarget())).PermitIf("Hungry", this.eatingBehaviour.StartState, (Func<bool>)(() => this.eatingBehaviour.IsHungry(this.IsHurt))).Permit("AssignmentTimedOut", "DoneWithWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+            {
+                this.UpdateAiStatus("I'm on it Boss");
+                this.m_assignedTimer = 0.0f;
+                this.m_startPosition = this.Instance.transform.position;
+            })).OnExit((Action<StateMachine<string, string>.Transition>)(t =>
+            {
+                if (this.m_carrying == null)
+                    return;
+                (this.Character as Humanoid).DropItem((this.Character as Humanoid).GetInventory(), this.m_carrying, 1);
+                this.m_carrying = (ItemDrop.ItemData)null;
+            }));
+            this.Brain.Configure("HaveAssignmentItem").SubstateOf("WorkerAssigned").Permit("ItemFound", "MoveToWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+            {
+                this.UpdateAiStatus("Trying to Pickup " + this.searchForItemsBehaviour.FoundItem.m_shared.m_name);
+                ItemDrop.ItemData itemData = (this.Character as Humanoid).PickupPrefab(this.searchForItemsBehaviour.FoundItem.m_dropPrefab);
+                (this.Character as Humanoid).EquipItem(itemData);
+                this.m_carrying = itemData;
+                this.Brain.Fire("ItemFound");
+            }));
+            this.Brain.Configure("HaveNoAssignmentItem").SubstateOf("WorkerAssigned").PermitIf("ItemNotFound", "DoneWithWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t => this.Brain.Fire("ItemNotFound")));
+            string nextState = "Idle";
+            this.Brain.Configure("MoveToWorkerAssignment").SubstateOf("WorkerAssigned").PermitDynamicIf<(MonsterAI, float)>(this.UpdateTrigger, (Func<(MonsterAI, float), string>)(args => nextState), (Func<(MonsterAI, float), bool>)(arg => this.MoveToWorkerAssignment(arg.Item2))).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+            {
+                this.UpdateAiStatus("Moving to assignment " + this.m_assignmentA.Peek().TypeOfAssignment.Name);
+                this.m_closeEnoughTimer = 0.0f;
+                if (t.Source == "HaveAssignmentItem")
+                    nextState = "UnloadToWorkerAssignment";
+                else
+                    nextState = "CheckingWorkerAssignment";
+            }));
+            
+            this.Brain.Configure("CheckingWorkerAssignment").SubstateOf("WorkerAssigned").Permit(this.LookForItemTrigger.Trigger, "SearchForItems").Permit("WorkerAssignmentFinished", "DoneWithWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+            {
+                this.StopMoving();
+                this.UpdateAiStatus("Checking assignment for task");
+                ItemDrop.ItemData needFuel = this.m_assignmentA.Peek().NeedFuel;
+                IEnumerable<ItemDrop.ItemData> needOre = this.m_assignmentA.Peek().NeedOre;
+                List<ItemDrop.ItemData> source = new List<ItemDrop.ItemData>();
+                Common.Dbgl("Ore:" + needOre.Join<ItemDrop.ItemData>((Func<ItemDrop.ItemData, string>)(j => j.m_shared.m_name)) + ", Fuel:" + needFuel?.m_shared.m_name);
+                if (needFuel != null)
+                {
+                    source.Add(needFuel);
+                    this.UpdateAiStatus("Adding " + needFuel.m_shared.m_name + " to search list");
+                }
+                if (needOre.Any<ItemDrop.ItemData>())
+                {
+                    source.AddRange(needOre);
+                    this.UpdateAiStatus("Adding " + needOre.Join<ItemDrop.ItemData>((Func<ItemDrop.ItemData, string>)(o => o.m_shared.m_name)) + " to search list");
+                }
+                if (!source.Any<ItemDrop.ItemData>())
+                    this.Brain.Fire("WorkerAssignmentFinished");
+                else
+                    this.Brain.Fire<IEnumerable<ItemDrop.ItemData>, string, string>(this.LookForItemTrigger, (IEnumerable<ItemDrop.ItemData>)source, "HaveAssignmentItem", "HaveNoAssignmentItem");
+            }));
+
+            this.Brain.Configure("UnloadToWorkerAssignment").SubstateOf("WorkerAssigned").Permit("WorkerAssignmentFinished", "CheckingWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+            {
+                this.StopMoving();
+                ItemDrop.ItemData needFuel = this.m_assignmentA.Peek().NeedFuel;
+                IEnumerable<ItemDrop.ItemData> needOre = this.m_assignmentA.Peek().NeedOre;
+                bool flag1 = this.m_carrying.m_shared.m_name == needFuel?.m_shared?.m_name;
+                bool flag2 = needOre != null && needOre.Any<ItemDrop.ItemData>((Func<ItemDrop.ItemData, bool>)(c => this.m_carrying.m_shared.m_name == c?.m_shared?.m_name));
+                if (flag1)
+                {
+                    this.UpdateAiStatus("Unload to " + this.m_assignmentA.Peek().TypeOfAssignment.Name + " -> Fuel");
+                    this.m_assignmentA.Peek().AssignmentObject.GetComponent<ZNetView>().InvokeRPC("AddFuel");
+                    (this.Character as Humanoid).GetInventory().RemoveOneItem(this.m_carrying);
+                }
+                else if (flag2)
+                {
+                    this.UpdateAiStatus("Unload to " + this.m_assignmentA.Peek().TypeOfAssignment.Name + " -> Ore");
+                    this.m_assignmentA.Peek().AssignmentObject.GetComponent<ZNetView>().InvokeRPC("AddOre", (object)Common.GetPrefabName(this.m_carrying.m_dropPrefab.name));
+                    (this.Character as Humanoid).GetInventory().RemoveOneItem(this.m_carrying);
+                }
+                else
+                {
+                    this.UpdateAiStatus("Dropping " + this.m_carrying.m_shared.m_name + " on the ground");
+                    (this.Character as Humanoid).DropItem((this.Character as Humanoid).GetInventory(), this.m_carrying, 1);
+                }
+                (this.Character as Humanoid).UnequipItem(this.m_carrying, false);
+                this.m_carrying = (ItemDrop.ItemData)null;
+                this.Brain.Fire("WorkerAssignmentFinished");
+            }));
+
+            this.Brain.Configure("DoneWithWorkerAssignment").SubstateOf("WorkerAssigned").Permit("LeaveWorkerAssignment", "Idle").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+            {
+                if (this.m_carrying != null)
+                {
+                    this.UpdateAiStatus("Dropping " + this.m_carrying.m_shared.m_name + " on the ground");
+                    (this.Character as Humanoid).DropItem((this.Character as Humanoid).GetInventory(), this.m_carrying, 1);
+                    this.m_carrying = (ItemDrop.ItemData)null;
+                }
+                this.UpdateAiStatus("Done with my assignments!");
+                this.m_containers.Peek()?.SetInUse(false);
+                this.Brain.Fire("LeaveWorkerAssignment");
             }));
         }
 
@@ -358,110 +481,7 @@ namespace FriendliesAI
             return this.MoveAndAvoidFire(this.m_assignment.Peek().FindClosestPoint(this.Instance.transform.position), dt, distance);
         }
 
-        private void ConfigureWorkerAssigned()
-        {
-            this.Brain.Configure("WorkerAssigned").SubstateOf("Idle").InitialTransition("MoveToWorkerAssignment").PermitIf("TakeDamage", "Fight", (Func<bool>)(() => (double)this.TimeSinceHurt < 20.0)).PermitIf("Follow", "Follow", (Func<bool>)(() => (bool)(UnityEngine.Object)(this.Instance as MonsterAI).GetFollowTarget())).PermitIf("Hungry", this.eatingBehaviour.StartState, (Func<bool>)(() => this.eatingBehaviour.IsHungry(this.IsHurt))).Permit("AssignmentTimedOut", "DoneWithWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
-            {
-                this.UpdateAiStatus("I'm on it Boss");
-                this.m_assignedTimer = 0.0f;
-                this.m_startPosition = this.Instance.transform.position;
-            })).OnExit((Action<StateMachine<string, string>.Transition>)(t =>
-            {
-                if (this.m_carrying == null)
-                    return;
-                (this.Character as Humanoid).DropItem((this.Character as Humanoid).GetInventory(), this.m_carrying, 1);
-                this.m_carrying = (ItemDrop.ItemData)null;
-            }));
-            this.Brain.Configure("HaveAssignmentItem").SubstateOf("WorkerAssigned").Permit("ItemFound", "MoveToWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
-            {
-                this.UpdateAiStatus("Trying to Pickup " + this.searchForItemsBehaviour.FoundItem.m_shared.m_name);
-                ItemDrop.ItemData itemData = (this.Character as Humanoid).PickupPrefab(this.searchForItemsBehaviour.FoundItem.m_dropPrefab);
-                (this.Character as Humanoid).EquipItem(itemData);
-                this.m_carrying = itemData;
-                this.Brain.Fire("ItemFound");
-            }));
-            this.Brain.Configure("HaveNoAssignmentItem").SubstateOf("WorkerAssigned").PermitIf("ItemNotFound", "DoneWithWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t => this.Brain.Fire("ItemNotFound")));
-        }
-
-        private void ConfigureMoveToWorkerAssignment()
-        {
-            string nextState = "Idle";
-            this.Brain.Configure("MoveToWorkerAssignment").SubstateOf("WorkerAssigned").PermitDynamicIf<(MonsterAI, float)>(this.UpdateTrigger, (Func<(MonsterAI, float), string>)(args => nextState), (Func<(MonsterAI, float), bool>)(arg => this.MoveToWorkerAssignment(arg.Item2))).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
-            {
-                this.UpdateAiStatus("Moving to assignment " + this.m_assignmentA.Peek().TypeOfAssignment.Name);
-                this.m_closeEnoughTimer = 0.0f;
-                if (t.Source == "HaveAssignmentItem")
-                    nextState = "UnloadToWorkerAssignment";
-                else
-                    nextState = "CheckingWorkerAssignment";
-            }));
-        }
-
-        private void ConfigureCheckingWorkerAssignment() => this.Brain.Configure("CheckingWorkerAssignment").SubstateOf("WorkerAssigned").Permit(this.LookForItemTrigger.Trigger, "SearchForItems").Permit("WorkerAssignmentFinished", "DoneWithWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
-        {
-            this.StopMoving();
-            this.UpdateAiStatus("Checking assignment for task");
-            ItemDrop.ItemData needFuel = this.m_assignmentA.Peek().NeedFuel;
-            IEnumerable<ItemDrop.ItemData> needOre = this.m_assignmentA.Peek().NeedOre;
-            List<ItemDrop.ItemData> source = new List<ItemDrop.ItemData>();
-            Common.Dbgl("Ore:" + needOre.Join<ItemDrop.ItemData>((Func<ItemDrop.ItemData, string>)(j => j.m_shared.m_name)) + ", Fuel:" + needFuel?.m_shared.m_name);
-            if (needFuel != null)
-            {
-                source.Add(needFuel);
-                this.UpdateAiStatus("Adding " + needFuel.m_shared.m_name + " to search list");
-            }
-            if (needOre.Any<ItemDrop.ItemData>())
-            {
-                source.AddRange(needOre);
-                this.UpdateAiStatus("Adding " + needOre.Join<ItemDrop.ItemData>((Func<ItemDrop.ItemData, string>)(o => o.m_shared.m_name)) + " to search list");
-            }
-            if (!source.Any<ItemDrop.ItemData>())
-                this.Brain.Fire("WorkerAssignmentFinished");
-            else
-                this.Brain.Fire<IEnumerable<ItemDrop.ItemData>, string, string>(this.LookForItemTrigger, (IEnumerable<ItemDrop.ItemData>)source, "HaveAssignmentItem", "HaveNoAssignmentItem");
-        }));
-
-        private void ConfigureUnloadToWorkerAssignment() => this.Brain.Configure("UnloadToWorkerAssignment").SubstateOf("WorkerAssigned").Permit("WorkerAssignmentFinished", "CheckingWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
-        {
-            this.StopMoving();
-            ItemDrop.ItemData needFuel = this.m_assignmentA.Peek().NeedFuel;
-            IEnumerable<ItemDrop.ItemData> needOre = this.m_assignmentA.Peek().NeedOre;
-            bool flag1 = this.m_carrying.m_shared.m_name == needFuel?.m_shared?.m_name;
-            bool flag2 = needOre != null && needOre.Any<ItemDrop.ItemData>((Func<ItemDrop.ItemData, bool>)(c => this.m_carrying.m_shared.m_name == c?.m_shared?.m_name));
-            if (flag1)
-            {
-                this.UpdateAiStatus("Unload to " + this.m_assignmentA.Peek().TypeOfAssignment.Name + " -> Fuel");
-                this.m_assignmentA.Peek().AssignmentObject.GetComponent<ZNetView>().InvokeRPC("AddFuel");
-                (this.Character as Humanoid).GetInventory().RemoveOneItem(this.m_carrying);
-            }
-            else if (flag2)
-            {
-                this.UpdateAiStatus("Unload to " + this.m_assignmentA.Peek().TypeOfAssignment.Name + " -> Ore");
-                this.m_assignmentA.Peek().AssignmentObject.GetComponent<ZNetView>().InvokeRPC("AddOre", (object)Common.GetPrefabName(this.m_carrying.m_dropPrefab.name));
-                (this.Character as Humanoid).GetInventory().RemoveOneItem(this.m_carrying);
-            }
-            else
-            {
-                this.UpdateAiStatus("Dropping " + this.m_carrying.m_shared.m_name + " on the ground");
-                (this.Character as Humanoid).DropItem((this.Character as Humanoid).GetInventory(), this.m_carrying, 1);
-            }
-         (this.Character as Humanoid).UnequipItem(this.m_carrying, false);
-            this.m_carrying = (ItemDrop.ItemData)null;
-            this.Brain.Fire("WorkerAssignmentFinished");
-        }));
-
-        private void ConfigureDoneWithWorkerAssignment() => this.Brain.Configure("DoneWithWorkerAssignment").SubstateOf("WorkerAssigned").Permit("LeaveWorkerAssignment", "Idle").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
-        {
-            if (this.m_carrying != null)
-            {
-                this.UpdateAiStatus("Dropping " + this.m_carrying.m_shared.m_name + " on the ground");
-                (this.Character as Humanoid).DropItem((this.Character as Humanoid).GetInventory(), this.m_carrying, 1);
-                this.m_carrying = (ItemDrop.ItemData)null;
-            }
-            this.UpdateAiStatus("Done with my assignments!");
-            this.m_containers.Peek()?.SetInUse(false);
-            this.Brain.Fire("LeaveWorkerAssignment");
-        }));
+        
 
         
         public override void UpdateAI(float dt)
@@ -636,6 +656,7 @@ namespace FriendliesAI
             public const string IsCloseToWorkerAssignment = "IsCloseToWorkerAssignment";
             public const string WorkerAssignmentFinished = "WorkerAssignmentFinished";
             public const string LeaveWorkerAssignment = "LeaveWorkerAssignment";
+            public const string HasWorkerTasks = "HasWorkerTasks";
         }
     }
 }

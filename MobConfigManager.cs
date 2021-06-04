@@ -41,6 +41,7 @@ namespace FriendliesAI
                     })
                     */
                     AIType = "NpcAI",
+                    PostTameConsumables = NpcConfig.PostTameConsumables.Select<string, ItemDrop>((Func<string, ItemDrop>)(i => ObjectDB.instance.GetAllItems(ItemDrop.ItemData.ItemType.Material, i).FirstOrDefault<ItemDrop>())),
                     AIConfig = JsonUtility.ToJson((object)new NpcAIConfig()
                     {
                         InteractRange = 1
@@ -49,7 +50,7 @@ namespace FriendliesAI
             }
             return new MobConfig()
             {
-                //PostTameConsumables = NpcConfig.PostTameConsumables.Select<string, ItemDrop>((Func<string, ItemDrop>)(i => ObjectDB.instance.GetAllItems(ItemDrop.ItemData.ItemType.Material, i).FirstOrDefault<ItemDrop>())),
+                PostTameConsumables = NpcConfig.PostTameConsumables.Select<string, ItemDrop>((Func<string, ItemDrop>)(i => ObjectDB.instance.GetAllItems(ItemDrop.ItemData.ItemType.Material, i).FirstOrDefault<ItemDrop>())),
                 PostTameFeedDuration = (float)NpcConfig.FeedDuration.Value,
                 //PreTameConsumables = NpcConfig.PreTameConsumables.Select<string, ItemDrop>((Func<string, ItemDrop>)(i => ObjectDB.instance.GetAllItems(ItemDrop.ItemData.ItemType.Material, i).FirstOrDefault<ItemDrop>())),
                 PreTameFeedDuration = (float)NpcConfig.FeedDuration.Value,

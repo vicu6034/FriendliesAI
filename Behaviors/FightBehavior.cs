@@ -163,7 +163,7 @@ namespace FriendliesAI.Behaviors
                 .OnExit(t =>
                 {
                     aiBase.Attacker = null;
-                    aiBase.TimeSinceHurt = 20;
+                    aiBase.TimeSinceHurt = 10;
                 });
         }
 

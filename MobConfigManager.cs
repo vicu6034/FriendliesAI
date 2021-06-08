@@ -42,6 +42,7 @@ namespace FriendliesAI
                     */
                     AIType = "NpcAI",
                     PostTameConsumables = NpcConfig.PostTameConsumables.Select<string, ItemDrop>((Func<string, ItemDrop>)(i => ObjectDB.instance.GetAllItems(ItemDrop.ItemData.ItemType.Material, i).FirstOrDefault<ItemDrop>())),
+                    TamingTime = NpcConfig.TamingTime.Value,
                     AIConfig = JsonUtility.ToJson((object)new NpcAIConfig()
                     {
                         InteractRange = 1

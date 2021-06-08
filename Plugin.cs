@@ -28,26 +28,26 @@ namespace FriendliesAI
         {
             Plugin.log = this.Logger;
             NpcConfig.Init(this.Config);
-            GrootConfig.Init(this.Config); 
+            GrootConfig.Init(this.Config);
             Type npcAI = new NpcAI().GetType();
             MobManager.RegisterMobAI(npcAI);
             //Debug.Log(MobManager.GetRegisteredMobAIs());
-            Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly());  
+            Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly());
         }
 
         [HarmonyPatch(typeof(Character), "Damage")]
         private static class Character_Damaged_Patch
         {
             private static void Prefix(
-              ref Character __instance,
-              ref ZNetView ___m_nview,
-              ref HitData hit)
+                ref Character __instance,
+                ref ZNetView ___m_nview,
+                ref HitData hit)
             {
                 string uniqueId = ___m_nview.GetZDO().GetString("RR_CharId");
                 if (string.IsNullOrEmpty(uniqueId) || !MobManager.IsAliveMob(uniqueId))
                     return;
                 Character attacker = hit.GetAttacker();
-                if ((UnityEngine.Object)attacker != (UnityEngine.Object)null && attacker.IsPlayer())
+                if ((UnityEngine.Object) attacker != (UnityEngine.Object) null && attacker.IsPlayer())
                     hit.m_damage.Modify(0.1f);
             }
         }
@@ -65,7 +65,8 @@ namespace FriendliesAI
                 //orAddTameable.m_tamingTime = mobConfig.TamingTime;
                 //orAddTameable.m_commandable = true;
                 AddVisualEquipmentCapability(__instance);
-                ___m_nview.Register<string, string>("RR_UpdateCharacterHUD", new Action<long, string, string>(RPC_UpdateCharacterName));
+                ___m_nview.Register<string, string>("RR_UpdateCharacterHUD",
+                    new Action<long, string, string>(RPC_UpdateCharacterName));
                 MonsterAI baseAi = __instance.GetBaseAI() as MonsterAI;
                 if (__instance.IsTamed())
                 {
@@ -75,14 +76,16 @@ namespace FriendliesAI
                     }
                     catch (ArgumentException ex)
                     {
-                        Debug.LogError((object)("Failed to register Mob AI (" + mobConfig.AIType + "). " + ex.Message));
+                        Debug.LogError((object) ("Failed to register Mob AI (" + mobConfig.AIType + "). " +
+                                                 ex.Message));
                         return;
                     }
+
                     //orAddTameable.m_fedDuration = mobConfig.PostTameFeedDuration;
                     //baseAi.m_consumeItems.Clear();
                     //baseAi.m_consumeItems.AddRange(mobConfig.PostTameConsumables);
                     baseAi.m_randomMoveRange = 5f;
-                    baseAi.m_consumeSearchRange = (float)NpcConfig.ItemSearchRadius.Value;
+                    baseAi.m_consumeSearchRange = (float) NpcConfig.ItemSearchRadius.Value;
                     string str = ___m_nview?.GetZDO()?.GetString("RR_GivenName");
                     if (!string.IsNullOrEmpty(str))
                         __instance.m_name = str;
@@ -105,6 +108,7 @@ namespace FriendliesAI
                     str = Guid.NewGuid().ToString();
                     ___m_nview.GetZDO().Set("RR_CharId", str);
                 }
+
                 return str;
             }
 
@@ -114,13 +118,18 @@ namespace FriendliesAI
                 {
                     __instance.gameObject.AddComponent<VisEquipment>();
                 }
+
                 if (__instance.m_name == "Groot")
                 {
-                    __instance.gameObject.GetComponent<VisEquipment>().m_rightHand = ((IEnumerable<Transform>)__instance.gameObject.GetComponentsInChildren<Transform>()).Where<Transform>((Func<Transform, bool>)(c => c.name == "r_hand")).Single<Transform>();
+                    __instance.gameObject.GetComponent<VisEquipment>().m_rightHand =
+                        ((IEnumerable<Transform>) __instance.gameObject.GetComponentsInChildren<Transform>())
+                        .Where<Transform>((Func<Transform, bool>) (c => c.name == "r_hand")).Single<Transform>();
                 }
             }
 
-            public static void BroadcastUpdateCharacterName(ref ZNetView nview, string text) => nview.InvokeRPC(ZNetView.Everybody, "RR_UpdateCharacterHUD", (object)nview.GetZDO().GetString("RR_CharId"), (object)text);
+            public static void BroadcastUpdateCharacterName(ref ZNetView nview, string text) => nview.InvokeRPC(
+                ZNetView.Everybody, "RR_UpdateCharacterHUD", (object) nview.GetZDO().GetString("RR_CharId"),
+                (object) text);
 
             public static void RPC_UpdateCharacterName(long sender, string uniqueId, string text)
             {
@@ -135,13 +144,18 @@ namespace FriendliesAI
                 {
                     return;
                 }
+
                 character.m_name = text;
-                IDictionary dictionary = EnemyHud.instance.GetType().GetField("m_huds", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.GetField).GetValue((object)EnemyHud.instance) as IDictionary;
-                if (!dictionary.Contains((object)character))
+                IDictionary dictionary =
+                    EnemyHud.instance.GetType()
+                        .GetField("m_huds", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.GetField)
+                        .GetValue((object) EnemyHud.instance) as IDictionary;
+                if (!dictionary.Contains((object) character))
                     return;
-                object obj = dictionary[(object)character];
-                Text text1 = obj.GetType().GetField("m_name", BindingFlags.Instance | BindingFlags.Public).GetValue(obj) as Text;
-                if ((UnityEngine.Object)text1 == (UnityEngine.Object)null)
+                object obj = dictionary[(object) character];
+                Text text1 =
+                    obj.GetType().GetField("m_name", BindingFlags.Instance | BindingFlags.Public).GetValue(obj) as Text;
+                if ((UnityEngine.Object) text1 == (UnityEngine.Object) null)
                     return;
                 text1.text = text;
             }
@@ -151,9 +165,9 @@ namespace FriendliesAI
         private static class MonsterAI_MakeTame_Patch
         {
             private static void Postfix(
-              MonsterAI __instance,
-              ZNetView ___m_nview,
-              Character ___m_character)
+                MonsterAI __instance,
+                ZNetView ___m_nview,
+                Character ___m_character)
             {
                 if (!MobConfigManager.IsControllableMob(__instance.name))
                     return;
@@ -168,7 +182,7 @@ namespace FriendliesAI
                 }
                 catch (ArgumentException ex)
                 {
-                    Debug.LogError((object)("Failed to register Mob AI (" + mobConfig.AIType + "). " + ex.Message));
+                    Debug.LogError((object) ("Failed to register Mob AI (" + mobConfig.AIType + "). " + ex.Message));
                 }
             }
         }
@@ -198,10 +212,10 @@ namespace FriendliesAI
         private static class Tameable_GetHoverName_Patch
         {
             private static bool Prefix(
-              Tameable __instance,
-              ref string __result,
-              ZNetView ___m_nview,
-              Character ___m_character)
+                Tameable __instance,
+                ref string __result,
+                ZNetView ___m_nview,
+                Character ___m_character)
             {
                 if (!MobConfigManager.IsControllableMob(__instance.name) || !___m_character.IsTamed())
                     return true;
@@ -210,9 +224,12 @@ namespace FriendliesAI
                     __result = string.Empty;
                     return true;
                 }
-                string str1 = ___m_nview.GetZDO().GetString("RR_AiStatus") ?? Traverse.Create((object)__instance).Method("GetStatusString").GetValue() as string;
+
+                string str1 = ___m_nview.GetZDO().GetString("RR_AiStatus") ??
+                              Traverse.Create((object) __instance).Method("GetStatusString").GetValue() as string;
                 string str2 = (___m_character.GetHoverName() + " ( Tame " + str1 + " )");
-                __result = (str2 + "\n[<color=yellow><b>E</b></color>] Follow/Stay\n[<color=yellow>Hold E</color>] to change name");
+                __result = (str2 +
+                            "\n[<color=yellow><b>E</b></color>] Follow/Stay\n[<color=yellow>Hold E</color>] to change name");
                 return false;
             }
         }
@@ -221,13 +238,13 @@ namespace FriendliesAI
         private static class Tameable_Interact_Patch
         {
             private static bool Prefix(
-              Tameable __instance,
-              ref bool __result,
-              Humanoid user,
-              bool hold,
-              ZNetView ___m_nview,
-              ref Character ___m_character,
-              ref float ___m_lastPetTime)
+                Tameable __instance,
+                ref bool __result,
+                Humanoid user,
+                bool hold,
+                ZNetView ___m_nview,
+                ref Character ___m_character,
+                ref float ___m_lastPetTime)
             {
                 if (!MobConfigManager.IsControllableMob(__instance.name))
                     return true;
@@ -236,90 +253,39 @@ namespace FriendliesAI
                     __result = false;
                     return true;
                 }
+
                 string hoverName = ___m_character.GetHoverName();
                 if (___m_character.IsTamed())
                 {
                     if (hold)
                     {
-                        TextInput.instance.RequestText((TextReceiver)new MyTextReceiver(___m_character), "Name", 15);
+                        TextInput.instance.RequestText((TextReceiver) new MyTextReceiver(___m_character), "Name", 15);
                         __result = false;
                         return false;
                     }
-                    if ((double)Time.time - (double)___m_lastPetTime > 1.0)
+
+                    if ((double) Time.time - (double) ___m_lastPetTime > 1.0)
                     {
                         ___m_lastPetTime = Time.time;
-                            __instance.m_petEffect.Create(___m_character.GetCenterPoint(), Quaternion.identity);
-                            if (__instance.m_commandable)
-                                typeof(Tameable).GetMethod("Command", BindingFlags.Instance | BindingFlags.NonPublic).Invoke((object)__instance, new object[1]
+                        __instance.m_petEffect.Create(___m_character.GetCenterPoint(), Quaternion.identity);
+                        if (__instance.m_commandable)
+                            typeof(Tameable).GetMethod("Command", BindingFlags.Instance | BindingFlags.NonPublic)
+                                .Invoke((object) __instance, new object[1]
                                 {
                                     (object) user
                                 });
-                            else
-                                user.Message(MessageHud.MessageType.Center, hoverName + " $hud_tamelove");
-                            __result = true;
-                            return false;
+                        else
+                            user.Message(MessageHud.MessageType.Center, hoverName + " $hud_tamelove");
+                        __result = true;
+                        return false;
                     }
+
                     __result = false;
                     return false;
                 }
+
                 __result = false;
                 return false;
-            }
-        }
-
-    [HarmonyPatch(typeof(VisEquipment), "AttachItem")]
-    private static class VisEquipment_AttachItem_Patch
-    {
-        public static bool Prefix(
-            VisEquipment __instance,
-            int itemHash,
-            int variant,
-            Transform joint,
-            ref GameObject __result,
-            ref SkinnedMeshRenderer ___m_bodyModel,
-            bool enableEquipEffects = true)
-        {
-            if (!MobConfigManager.IsControllableMob(__instance.name))
-                return true;
-            GameObject itemPrefab = ObjectDB.instance.GetItemPrefab(itemHash);
-            if (itemPrefab == null)
-            {
-                __result = null;
-                return false;
-            }
-
-            if (itemPrefab.transform.childCount == 0)
-            {
-                __result = null;
-                return false;
-            }
-
-            Transform transform = null;
-            for (int index = 0; index < itemPrefab.transform.childCount; ++index)
-            {
-                transform = itemPrefab.transform.GetChild(index);
-                if (transform.gameObject.name == "attach" || transform.gameObject.name == "attach_skin")
-                    break;
-            }
-
-            if (transform == null)
-                transform = itemPrefab.transform.GetChild(0);
-            GameObject gameObject1 = transform.gameObject;
-            if (gameObject1 == null)
-            {
-                __result = null;
-                return false;
-            }
-
-            GameObject gameObject2 = UnityEngine.Object.Instantiate<GameObject>(gameObject1);
-            gameObject2.SetActive(true);
-            foreach (Collider componentsInChild in gameObject2.GetComponentsInChildren<Collider>())
-                componentsInChild.enabled = false;
-            gameObject2.transform.SetParent(joint);
-            gameObject2.transform.localPosition = Vector3.zero;
-            gameObject2.transform.localRotation = Quaternion.identity;
-            __result = gameObject2;
-            return false;
             }
         }
     }

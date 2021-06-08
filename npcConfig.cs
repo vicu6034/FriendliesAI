@@ -20,9 +20,9 @@ namespace FriendliesAI
 
         public static void Init(ConfigFile Config)
         {
-            TamingItemList = Config.Bind<string>("General", "Npc_TamingItemList", "Gold", "Comma separated list if items used to tame NPCs");
+            TamingItemList = Config.Bind<string>("General", "Npc_TamingItemList", "Coins", "Comma separated list if items used to tame NPCs");
             FeedDuration = Config.Bind<int>("General", "Npc_FeedDuration", 500, "Time before getting hungry after consuming one item");
-            TamingTime = Config.Bind<int>("General", "Npc_TamingTime", 1000, "Total time it takes to tame an NPC");
+            TamingTime = Config.Bind<int>("General", "Npc_TamingTime", 0, "Total time it takes to tame an NPC");
             AssignmentSearchRadius = Config.Bind<int>("General", "Npc_AssignmentSearchRadius", 30, "Radius to search for new assignments within");
             ItemSearchRadius = Config.Bind<int>("General", "Npc_ItemSearchRadius", 10, "Radius to search for items on the ground");
             ContainerSearchRadius = Config.Bind<int>("General", "Npc_ContainerSearchRadius", 10, "Radius to search for containers");

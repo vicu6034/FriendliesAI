@@ -180,14 +180,7 @@ namespace FriendliesAI
 
         private void ConfigureFight() => this.Brain.Configure("Fight").SubstateOf("Root").Permit("Fight", this.fightBehaviour.StartState).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
         {
-            if (this.m_lastState == "Follow")
-            {
-                this.fightBehaviour.SuccessState = "Follow";
-            }
-            else
-            {
-                this.fightBehaviour.SuccessState = "Idle";
-            }
+            this.fightBehaviour.SuccessState = "Idle";
             this.fightBehaviour.FailState = "Flee";
             this.fightBehaviour.m_mobilityLevel = (float)this.Mobility;
             this.fightBehaviour.m_agressionLevel = (float)this.Agressiveness;
@@ -200,7 +193,8 @@ namespace FriendliesAI
                 (this.Character as Humanoid).UnequipItem(currentWeapon);
             MobAIBase.Invoke<MonsterAI>((object)this.Instance, "SetAlerted", (object)false);
         }));
-        
+
+
         private void ConfigureFlee() => this.Brain.Configure("Flee").SubstateOf("Root").PermitIf<(MonsterAI, float)>(this.UpdateTrigger, "Idle", (Func<(MonsterAI, float), bool>)(args => Common.Alarmed((BaseAI)args.Item1, (float)Mathf.Max(1, this.Awareness - 1)))).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
         {
             this.UpdateAiStatus("Got hurt, flee!");
@@ -218,19 +212,18 @@ namespace FriendliesAI
             this.Attacker = (Character)null;
             MobAIBase.Invoke<MonsterAI>((object)this.Instance, "SetAlerted", (object)false);
         })).OnExit((Action<StateMachine<string, string>.Transition>)(t => this.HomePosition = this.m_startPosition = this.eatingBehaviour.LastKnownFoodPosition = this.Instance.transform.position));
-        
-        private void ConfigureSearchForItems() => this.Brain.Configure("SearchForItems".ToString()).SubstateOf("Root").Permit("SearchForItems", this.searchForItemsBehaviour.StartState).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+
+        private void ConfigureSearchForItems() => this.Brain.Configure("SearchForItems").SubstateOf("Root").Permit("SearchForItems", this.searchForItemsBehaviour.StartState).Permit("ShoutedAt", "MoveAwayFrom").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
         {
-            Common.Dbgl("ConfigureSearchContainers Initiated");
             this.searchForItemsBehaviour.KnownContainers = this.m_containers;
-            this.searchForItemsBehaviour.Items = t.Parameters[0] as IEnumerable<ItemDrop.ItemData>; 
+            this.searchForItemsBehaviour.Items = t.Parameters[0] as IEnumerable<ItemDrop.ItemData>;
             //this.searchForItemsBehaviour.AcceptedContainerNames = this.m_config.IncludedContainers;
-            this.searchForItemsBehaviour.AcceptedContainerNames = new string[1]{"Chest"};
+            this.searchForItemsBehaviour.AcceptedContainerNames = new String[1]{"piece_chest_wood"};
             this.searchForItemsBehaviour.SuccessState = t.Parameters[1] as string;
             this.searchForItemsBehaviour.FailState = t.Parameters[2] as string;
-            this.Brain.Fire("SearchForItems".ToString());
+            this.Brain.Fire("SearchForItems");
         }));
-        
+
         private void ConfigureAssigned()
         {
             this.Brain.Configure("Assigned").SubstateOf("Idle").InitialTransition("MoveToAssignment").Permit("HasWorkerTasks", "WorkerAssigned").Permit("AssignmentTimedOut", "Idle").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>

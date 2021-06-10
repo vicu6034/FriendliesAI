@@ -13,7 +13,7 @@ using UnityEngine.UI;
 
 namespace FriendliesAI
 {
-    [BepInPlugin("som.FriendliesAI", "FriendliesAI", "0.0.1")]
+    [BepInPlugin("som.FriendliesAI", "FriendliesAI", "0.0.2")]
     [BepInDependency("som.Friendlies")]
     [BepInDependency("RagnarsRokare.MobAILib")]
 
@@ -21,14 +21,13 @@ namespace FriendliesAI
     {
         private const string GUID = "som.FriendliesAI";
         private const string NAME = "FriendliesAI";
-        private const string VERSION = "0.0.1";
+        private const string VERSION = "0.0.2";
         internal static ManualLogSource log;
 
         private void Awake()
         {
             Plugin.log = this.Logger;
             NpcConfig.Init(this.Config);
-            GrootConfig.Init(this.Config);
             Type npcAI = new NpcAI().GetType();
             MobManager.RegisterMobAI(npcAI);
             //Debug.Log(MobManager.GetRegisteredMobAIs());
@@ -45,6 +44,8 @@ namespace FriendliesAI
             {
                 string uniqueId = ___m_nview.GetZDO().GetString("RR_CharId");
                 if (string.IsNullOrEmpty(uniqueId) || !MobManager.IsAliveMob(uniqueId))
+                    return;
+                if (hit.GetAttacker() == null)
                     return;
                 Character attacker = hit.GetAttacker();
                 if ((UnityEngine.Object) attacker != (UnityEngine.Object) null && attacker.IsPlayer())
@@ -114,17 +115,15 @@ namespace FriendliesAI
 
             private static void AddVisualEquipmentCapability(Character __instance)
             {
+                /*
                 if (__instance.gameObject.GetComponent<VisEquipment>() == null)
                 {
                     __instance.gameObject.AddComponent<VisEquipment>();
                 }
-
-                if (__instance.m_name == "Groot")
-                {
-                    __instance.gameObject.GetComponent<VisEquipment>().m_rightHand =
-                        ((IEnumerable<Transform>) __instance.gameObject.GetComponentsInChildren<Transform>())
-                        .Where<Transform>((Func<Transform, bool>) (c => c.name == "r_hand")).Single<Transform>();
-                }
+                */
+                __instance.gameObject.GetComponent<VisEquipment>().m_rightHand =
+                    ((IEnumerable<Transform>) __instance.gameObject.GetComponentsInChildren<Transform>())
+                    .Where<Transform>((Func<Transform, bool>) (c => c.name == "RightHand_Attach")).Single<Transform>();
             }
 
             public static void BroadcastUpdateCharacterName(ref ZNetView nview, string text) => nview.InvokeRPC(

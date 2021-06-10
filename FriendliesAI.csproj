@@ -76,7 +76,6 @@
   <ItemGroup>
     <Compile Include="Behaviors\FightBehavior.cs" />
     <Compile Include="Behaviors\SearchForItemsBehavior.cs" />
-    <Compile Include="grootConfig.cs" />
     <Compile Include="MobConfig.cs" />
     <Compile Include="MobConfigManager.cs" />
     <Compile Include="NpcAI.cs" />

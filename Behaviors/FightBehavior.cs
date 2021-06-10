@@ -1,300 +1,197 @@
-﻿using System;
-using RagnarsRokare.MobAI;
-using Stateless;
+﻿using Stateless;
+using System;
 using UnityEngine;
+using RagnarsRokare.MobAI;
 
 namespace FriendliesAI.Behaviors
 {
-    class FightBehaviour : IBehaviour
+    internal class FightBehaviour : IBehaviour
     {
         private const string Prefix = "RR_FIGHT";
-        private class State
-        {
-            public const string Main = Prefix + "Main";
-            public const string IdentifyEnemy = Prefix + "IdentifyEnemy";
-            public const string SelectWeapon = Prefix + "SelectWeapon";
-            public const string TrackingEnemy = Prefix + "TrackingEnemy";
-            public const string EngagingEnemy = Prefix + "EngaugingEnemy";
-            public const string CirclingEnemy = Prefix + "CirclingEnemy";
-            public const string AvoidFire = Prefix + "AvoidFire";
-            public const string DoneFighting = Prefix + "DoneFigfhting";
-        }
-
-        private class Trigger
-        {
-            public const string Failed = Prefix + "Failed";
-            public const string Timeout = Prefix + "Timeout";
-            public const string WeaponSelected = Prefix + "WeaponSelected";
-            public const string FoundTarget = Prefix + "FoundTarget";
-            public const string NoTarget = Prefix + "NoTarget";
-            public const string TargetLost = Prefix + "TargetLost";
-            public const string Attack = Prefix + "Attack";
-            public const string Flee = Prefix + "Flee";
-            public const string Reposition = Prefix + "Reposition";
-            public const string Done = Prefix + "Done";
-        }
-
-        // Input
-
-        // Output
-
-        // Settings
-        public string SuccessState { get; set; }
-        public string FailState { get; set; }
-        public string StartState { get { return State.Main; } }
-
         public float m_mobilityLevel;
         public float m_agressionLevel;
         public float m_awarenessLevel;
-
-        // Management
         private float m_viewRange;
         private Vector3 m_startPosition;
         private float m_circleTargetDistance;
         private float m_searchTargetMovement;
         private MobAIBase m_aiBase;
         private ItemDrop.ItemData m_weapon;
-
-        // Timers
         private float m_circleTimer;
         private float m_searchTimer;
 
-        public bool IsBelowHealthThreshold(MobAIBase aiBase)
-        {
-            return aiBase.Character.GetHealthPercentage() < 1 - m_agressionLevel * 0.08;
-        }
+        public string SuccessState { get; set; }
+
+        public string FailState { get; set; }
+
+        public string StartState => "RR_FIGHTMain";
+
+        public bool IsBelowHealthThreshold(MobAIBase aiBase) => (double)aiBase.Character.GetHealthPercentage() < 1.0 - (double)this.m_agressionLevel * 0.08;
 
         public void Configure(MobAIBase aiBase, StateMachine<string, string> brain, string parentState)
         {
-            m_aiBase = aiBase;
-            brain.Configure(State.Main)
-                .InitialTransition(State.IdentifyEnemy)
-                .PermitDynamic(Trigger.Flee, () => FailState)
-                .Permit(Trigger.TargetLost, State.IdentifyEnemy)
-                .SubstateOf(parentState)
-                .OnEntry(t =>
-                {
-                    m_aiBase.UpdateAiStatus("Entered fighting behaviour");
-                    m_startPosition = aiBase.Instance.transform.position;
-                    m_viewRange = m_awarenessLevel * 5f;
-                    m_circleTargetDistance = m_mobilityLevel * 2 - m_agressionLevel;
-                    m_searchTargetMovement = m_mobilityLevel;
-                })
-                .OnExit(t =>
-                {
-                    aiBase.StopMoving();
-                    aiBase.TargetCreature = null;
-                });
-
-            brain.Configure(State.IdentifyEnemy)
-                .SubstateOf(State.Main)
-                .Permit(Trigger.FoundTarget, State.SelectWeapon)
-                .Permit(Trigger.NoTarget, State.DoneFighting)
-                .OnEntry(t =>
-                {
-                    //Debug.Log("IdentifyEnemy-Enter");
-                    m_searchTimer = m_agressionLevel * 2;
-                    if (aiBase.Attacker != null && aiBase.Instance.CanSenseTarget(aiBase.Attacker))
-                    {
-                        aiBase.TargetCreature = aiBase.Attacker;
-                        aiBase.Brain.Fire(Trigger.FoundTarget);
-                        return;
-                    }
-                });
-
-            brain.Configure(State.SelectWeapon)
-                .SubstateOf(State.Main)
-                .Permit(Trigger.WeaponSelected, State.TrackingEnemy)
-                .PermitDynamic(Trigger.Failed, () => FailState)
-                .OnEntry(t =>
-                {
-                    //Debug.Log("SelectWeapon-Enter");
-                    m_weapon = (ItemDrop.ItemData)Common.Invoke<MonsterAI>(aiBase.Instance, "SelectBestAttack", (aiBase.Character as Humanoid), 1.0f);
-                    if (m_weapon == null)
-                    {
-                        //Debug.Log("SelectWeapon-Fail");
-                        brain.Fire(Trigger.Failed);
-                    }
-                    else
-                    {
-                        brain.Fire(Trigger.WeaponSelected);
-                    }
-                });
-
-
-            brain.Configure(State.TrackingEnemy)
-                .SubstateOf(State.Main)
-                .Permit(Trigger.Attack, State.EngagingEnemy)
-                .Permit(Trigger.NoTarget, State.IdentifyEnemy)
-                .OnEntry(t =>
-                {
-                    //Debug.Log("TrackingEnemy-Enter");
-                    m_searchTimer = m_agressionLevel * 2;
-                });
-
-            brain.Configure(State.EngagingEnemy)
-                .SubstateOf(State.Main)
-                .Permit(Trigger.Attack, State.TrackingEnemy)
-                .Permit(Trigger.NoTarget, State.IdentifyEnemy)
-                .Permit(Trigger.Reposition, State.CirclingEnemy)
-                .OnEntry(t =>
-                {
-                    m_circleTimer = m_agressionLevel;
-                });
-
-            brain.Configure(State.CirclingEnemy)
-                .Permit(Trigger.Attack, State.TrackingEnemy)
-                .SubstateOf(State.Main)
-                .OnEntry(t =>
-                {
-                    m_circleTimer = 30f / m_agressionLevel;
-                    aiBase.Character.Heal(aiBase.Character.GetMaxHealth() / 50);
-                });
-
-
-            brain.Configure(State.DoneFighting)
-                .SubstateOf(State.Main)
-                .PermitDynamic(Trigger.Done, () => SuccessState)
-                .OnEntry(t =>
-                {
-                    m_aiBase.UpdateAiStatus("Done fighting.");
-                    aiBase.Character.Heal(aiBase.Character.GetMaxHealth() / 10);
-                })
-                .OnExit(t =>
-                {
-                    aiBase.Attacker = null;
-                    aiBase.TimeSinceHurt = 10;
-                });
+            this.m_aiBase = aiBase;
+            brain.Configure("RR_FIGHTMain").InitialTransition("RR_FIGHTIdentifyEnemy").PermitDynamic("RR_FIGHTFlee", (Func<string>)(() => this.FailState)).Permit("RR_FIGHTTargetLost", "RR_FIGHTIdentifyEnemy").SubstateOf(parentState).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+            {
+                this.m_aiBase.UpdateAiStatus("Entered fighting behaviour");
+                this.m_startPosition = aiBase.Instance.transform.position;
+                this.m_viewRange = this.m_awarenessLevel * 5f;
+                this.m_circleTargetDistance = this.m_mobilityLevel * 2f - this.m_agressionLevel;
+                this.m_searchTargetMovement = this.m_mobilityLevel;
+            })).OnExit((Action<StateMachine<string, string>.Transition>)(t =>
+            {
+                aiBase.StopMoving();
+                aiBase.TargetCreature = (Character)null;
+            }));
+            brain.Configure("RR_FIGHTIdentifyEnemy").SubstateOf("RR_FIGHTMain").Permit("RR_FIGHTFoundTarget", "RR_FIGHTSelectWeapon").Permit("RR_FIGHTNoTarget", "RR_FIGHTDoneFighting").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+            {
+                this.m_searchTimer = this.m_agressionLevel * 2f;
+                if (!((UnityEngine.Object)aiBase.Attacker != (UnityEngine.Object)null) || !aiBase.Instance.CanSenseTarget(aiBase.Attacker))
+                    return;
+                aiBase.TargetCreature = aiBase.Attacker;
+                aiBase.Brain.Fire("RR_FIGHTFoundTarget");
+            }));
+            brain.Configure("RR_FIGHTSelectWeapon").SubstateOf("RR_FIGHTMain").Permit("RR_FIGHTWeaponSelected", "RR_FIGHTTrackingEnemy").PermitDynamic("RR_FIGHTFailed", (Func<string>)(() => this.FailState)).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+            {
+                this.m_weapon = (ItemDrop.ItemData)Common.Invoke<MonsterAI>((object)aiBase.Instance, "SelectBestAttack", (object)(aiBase.Character as Humanoid), (object)1f);
+                if (this.m_weapon == null)
+                    brain.Fire("RR_FIGHTFailed");
+                else
+                    brain.Fire("RR_FIGHTWeaponSelected");
+            }));
+            brain.Configure("RR_FIGHTTrackingEnemy").SubstateOf("RR_FIGHTMain").Permit("RR_FIGHTAttack", "RR_FIGHTEngagingEnemy").Permit("RR_FIGHTNoTarget", "RR_FIGHTIdentifyEnemy").OnEntry((Action<StateMachine<string, string>.Transition>)(t => this.m_searchTimer = this.m_agressionLevel * 2f));
+            brain.Configure("RR_FIGHTEngagingEnemy").SubstateOf("RR_FIGHTMain").Permit("RR_FIGHTAttack", "RR_FIGHTTrackingEnemy").Permit("RR_FIGHTNoTarget", "RR_FIGHTIdentifyEnemy").Permit("RR_FIGHTReposition", "RR_FIGHTCirclingEnemy").OnEntry((Action<StateMachine<string, string>.Transition>)(t => this.m_circleTimer = this.m_agressionLevel));
+            brain.Configure("RR_FIGHTCirclingEnemy").Permit("RR_FIGHTAttack", "RR_FIGHTTrackingEnemy").SubstateOf("RR_FIGHTMain").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+            {
+                this.m_circleTimer = 30f / this.m_agressionLevel;
+                aiBase.Character.Heal(aiBase.Character.GetMaxHealth() / 50f);
+            }));
+            brain.Configure("RR_FIGHTDoneFighting").SubstateOf("RR_FIGHTMain").PermitDynamic("RR_FIGHTDone", (Func<string>)(() => this.SuccessState)).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+            {
+                this.m_aiBase.UpdateAiStatus("Done fighting.");
+                aiBase.Character.Heal(aiBase.Character.GetMaxHealth() / 10f);
+            })).OnExit((Action<StateMachine<string, string>.Transition>)(t =>
+            {
+                aiBase.Attacker = (Character)null;
+                aiBase.TimeSinceHurt = 20f;
+            }));
         }
 
         public void Update(MobAIBase aiBase, float dt)
         {
-            if (IsBelowHealthThreshold(aiBase))
+            if (this.IsBelowHealthThreshold(aiBase))
+                aiBase.Brain.Fire("RR_FIGHTFlee");
+            else if (aiBase.Brain.IsInState("RR_FIGHTIdentifyEnemy"))
             {
-                aiBase.Brain.Fire(Trigger.Flee);
-                return;
-            }
-
-            if (aiBase.Brain.IsInState(State.IdentifyEnemy))
-            {
-                m_searchTimer -= dt;
-                Common.Invoke<MonsterAI>(aiBase.Instance, "RandomMovementArroundPoint", dt, m_startPosition, m_circleTargetDistance, true);
-                if (Vector3.Distance(m_startPosition, aiBase.Character.transform.position) > m_viewRange - 5)
-                {
+                this.m_searchTimer -= dt;
+                Common.Invoke<MonsterAI>((object)aiBase.Instance, "RandomMovementArroundPoint", (object)dt, (object)this.m_startPosition, (object)this.m_circleTargetDistance, (object)true);
+                if ((double)Vector3.Distance(this.m_startPosition, aiBase.Character.transform.position) > (double)this.m_viewRange - 5.0)
                     return;
-                }
-                aiBase.TargetCreature = BaseAI.FindClosestEnemy(aiBase.Character, m_startPosition, m_viewRange);
-                if (aiBase.TargetCreature != null && Vector3.Distance(m_startPosition, aiBase.TargetCreature.transform.position) < m_viewRange)
+                aiBase.TargetCreature = BaseAI.FindClosestEnemy(aiBase.Character, this.m_startPosition, this.m_viewRange);
+                if ((UnityEngine.Object)aiBase.TargetCreature != (UnityEngine.Object)null && (double)Vector3.Distance(this.m_startPosition, aiBase.TargetCreature.transform.position) < (double)this.m_viewRange)
                 {
-                    Common.Invoke<MonsterAI>(aiBase.Instance, "LookAt", aiBase.TargetCreature.transform.position);
-                    //Debug.Log("IdentifyEnemy-FoundTarget");
-                    aiBase.Brain.Fire(Trigger.FoundTarget);
-                    return;
+                    Common.Invoke<MonsterAI>((object)aiBase.Instance, "LookAt", (object)aiBase.TargetCreature.transform.position);
+                    aiBase.Brain.Fire("RR_FIGHTFoundTarget");
                 }
-                if (m_searchTimer <= 0)
+                else
                 {
-                    //Debug.Log("IdentifyEnemy-NoTarget");
+                    if ((double)this.m_searchTimer > 0.0)
+                        return;
                     aiBase.StopMoving();
-                    aiBase.Brain.Fire(Trigger.NoTarget);
+                    aiBase.Brain.Fire("RR_FIGHTNoTarget");
                 }
-                return;
             }
-
-            if (aiBase.TargetCreature == null)
+            else if ((UnityEngine.Object)aiBase.TargetCreature == (UnityEngine.Object)null)
             {
-                aiBase.Attacker = null;
-                aiBase.Brain.Fire(Trigger.TargetLost);
-                //Debug.Log("TargetLost");
-                return;
+                aiBase.Attacker = (Character)null;
+                aiBase.Brain.Fire("RR_FIGHTTargetLost");
             }
-
-            if (aiBase.Brain.IsInState(State.TrackingEnemy))
+            else if (aiBase.Brain.IsInState("RR_FIGHTTrackingEnemy"))
             {
-                m_searchTimer -= dt;
-                if (aiBase.Attacker != null && aiBase.TargetCreature != aiBase.Attacker && aiBase.Instance.CanSenseTarget(aiBase.Attacker))
-                {
+                this.m_searchTimer -= dt;
+                if ((UnityEngine.Object)aiBase.Attacker != (UnityEngine.Object)null && (UnityEngine.Object)aiBase.TargetCreature != (UnityEngine.Object)aiBase.Attacker && aiBase.Instance.CanSenseTarget(aiBase.Attacker))
                     aiBase.TargetCreature = aiBase.Attacker;
-                    ////Debug.Log("TrackingEnemy-Switch target to Attacker");
-                }
-                Common.Invoke<MonsterAI>(aiBase.Instance, "LookAt", aiBase.TargetCreature.transform.position);
-                if (Vector3.Distance(m_startPosition, aiBase.Character.transform.position) > m_viewRange && (aiBase.TargetCreature != aiBase.Attacker || m_agressionLevel < 5))
+                Common.Invoke<MonsterAI>((object)aiBase.Instance, "LookAt", (object)aiBase.TargetCreature.transform.position);
+                if ((double)Vector3.Distance(this.m_startPosition, aiBase.Character.transform.position) > (double)this.m_viewRange && ((UnityEngine.Object)aiBase.TargetCreature != (UnityEngine.Object)aiBase.Attacker || (double)this.m_agressionLevel < 5.0))
                 {
-                    //Debug.Log("TrackingEnemy-NoTarget(lost track)");
-                    aiBase.TargetCreature = null;
-                    aiBase.Attacker = null;
+                    aiBase.TargetCreature = (Character)null;
+                    aiBase.Attacker = (Character)null;
                     aiBase.StopMoving();
-                    aiBase.Brain.Fire(Trigger.NoTarget);
-                    return;
+                    aiBase.Brain.Fire("RR_FIGHTNoTarget");
                 }
-                //Debug.Log("TrackingEnemy-MoveToTarget");
-                if (aiBase.MoveAndAvoidFire(aiBase.TargetCreature.transform.position, dt, Math.Max(m_weapon.m_shared.m_aiAttackRange - 0.5f, 1.0f), true))
+                else if (aiBase.MoveAndAvoidFire(aiBase.TargetCreature.transform.position, dt, Math.Max(this.m_weapon.m_shared.m_aiAttackRange - 0.5f, 1f), true))
                 {
                     aiBase.StopMoving();
-                    //Debug.Log("TrackingEnemy-Attack");
-                    aiBase.Brain.Fire(Trigger.Attack);
-                    return;
+                    aiBase.Brain.Fire("RR_FIGHTAttack");
                 }
-                if (m_searchTimer <= 0)
+                else
                 {
-                    //Debug.Log("TrackingEnemy-NoTarget(timeout)");
-                    aiBase.TargetCreature = null;
-                    aiBase.Attacker = null;
+                    if ((double)this.m_searchTimer > 0.0)
+                        return;
+                    aiBase.TargetCreature = (Character)null;
+                    aiBase.Attacker = (Character)null;
                     aiBase.StopMoving();
-                    aiBase.Brain.Fire(Trigger.NoTarget);
+                    aiBase.Brain.Fire("RR_FIGHTNoTarget");
                 }
-                //Debug.Log("TrackingEnemy-End");
-                return;
             }
-
-            if (aiBase.Brain.IsInState(State.EngagingEnemy))
+            else if (aiBase.Brain.IsInState("RR_FIGHTEngagingEnemy"))
             {
-                m_circleTimer -= dt;
-                bool isLookingAtTarget = (bool)Common.Invoke<MonsterAI>(aiBase.Instance, "IsLookingAt", aiBase.TargetCreature.transform.position, 10f);
-                bool isCloseToTarget = Vector3.Distance(aiBase.Instance.transform.position, aiBase.TargetCreature.transform.position) < m_weapon.m_shared.m_aiAttackRange;
-                if (!isCloseToTarget)
-                {
-                    //Debug.Log("EngagingEnemy-Attack");
-                    aiBase.Brain.Fire(Trigger.Attack);
-                    return;
-                }
-                if (!isLookingAtTarget)
-                {
-                    Common.Invoke<MonsterAI>(aiBase.Instance, "LookAt", aiBase.TargetCreature.transform.position);
-                    return;
-                }
-                if (m_circleTimer <= 0)
-                {
-                    //Debug.Log("EngagingEnemy-Reposition");
-                    aiBase.Brain.Fire(Trigger.Reposition);
-                    return;
-                }
-                Common.Invoke<MonsterAI>(aiBase.Instance, "DoAttack", aiBase.TargetCreature, false);
-                //Debug.Log("EngagingEnemy-DoAttack");
-                return;
+                this.m_circleTimer -= dt;
+                bool flag = (bool)Common.Invoke<MonsterAI>((object)aiBase.Instance, "IsLookingAt", (object)aiBase.TargetCreature.transform.position, (object)10f);
+                if ((double)Vector3.Distance(aiBase.Instance.transform.position, aiBase.TargetCreature.transform.position) >= (double)this.m_weapon.m_shared.m_aiAttackRange)
+                    aiBase.Brain.Fire("RR_FIGHTAttack");
+                else if (!flag)
+                    Common.Invoke<MonsterAI>((object)aiBase.Instance, "LookAt", (object)aiBase.TargetCreature.transform.position);
+                else if ((double)this.m_circleTimer <= 0.0)
+                    aiBase.Brain.Fire("RR_FIGHTReposition");
+                else
+                    Common.Invoke<MonsterAI>((object)aiBase.Instance, "DoAttack", (object)aiBase.TargetCreature, (object)false);
             }
-
-            if (aiBase.Brain.IsInState(State.CirclingEnemy))
+            else
             {
-                m_circleTimer -= dt;
-                Common.Invoke<MonsterAI>(aiBase.Instance, "RandomMovementArroundPoint", dt, aiBase.TargetCreature.transform.position, m_circleTargetDistance, true);
-                if (m_circleTimer <= 0)
+                if (aiBase.Brain.IsInState("RR_FIGHTCirclingEnemy"))
                 {
-                    //Debug.Log("CirclingEnemy-Attack");
-                    aiBase.Brain.Fire(Trigger.Attack);
+                    this.m_circleTimer -= dt;
+                    Common.Invoke<MonsterAI>((object)aiBase.Instance, "RandomMovementArroundPoint", (object)dt, (object)aiBase.TargetCreature.transform.position, (object)this.m_circleTargetDistance, (object)true);
+                    if ((double)this.m_circleTimer <= 0.0)
+                    {
+                        aiBase.Brain.Fire("RR_FIGHTAttack");
+                        return;
+                    }
+                }
+                if (!aiBase.Brain.IsInState("RR_FIGHTDoneFighting"))
                     return;
-                }
+                aiBase.MoveAndAvoidFire(this.m_startPosition, dt, 0.5f);
+                if ((double)Vector3.Distance(this.m_startPosition, aiBase.Character.transform.position) >= 1.0)
+                    return;
+                aiBase.Brain.Fire("RR_FIGHTDone");
             }
+        }
 
-            if (aiBase.Brain.IsInState(State.DoneFighting))
-            {
-                aiBase.MoveAndAvoidFire(m_startPosition, dt, 0.5f, false);
-                if (Vector3.Distance(m_startPosition, aiBase.Character.transform.position) < 1f)
-                {
-                    //Debug.Log("DoneFighting-Done");
-                    aiBase.Brain.Fire(Trigger.Done);
-                }
-                return;
-            }
+        private class State
+        {
+            public const string Main = "RR_FIGHTMain";
+            public const string IdentifyEnemy = "RR_FIGHTIdentifyEnemy";
+            public const string SelectWeapon = "RR_FIGHTSelectWeapon";
+            public const string TrackingEnemy = "RR_FIGHTTrackingEnemy";
+            public const string EngagingEnemy = "RR_FIGHTEngagingEnemy";
+            public const string CirclingEnemy = "RR_FIGHTCirclingEnemy";
+            public const string AvoidFire = "RR_FIGHTAvoidFire";
+            public const string DoneFighting = "RR_FIGHTDoneFighting";
+        }
+
+        private class Trigger
+        {
+            public const string Failed = "RR_FIGHTFailed";
+            public const string Timeout = "RR_FIGHTTimeout";
+            public const string WeaponSelected = "RR_FIGHTWeaponSelected";
+            public const string FoundTarget = "RR_FIGHTFoundTarget";
+            public const string NoTarget = "RR_FIGHTNoTarget";
+            public const string TargetLost = "RR_FIGHTTargetLost";
+            public const string Attack = "RR_FIGHTAttack";
+            public const string Flee = "RR_FIGHTFlee";
+            public const string Reposition = "RR_FIGHTReposition";
+            public const string Done = "RR_FIGHTDone";
         }
     }
 }

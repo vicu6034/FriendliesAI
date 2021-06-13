@@ -27,7 +27,7 @@ namespace FriendliesAI.Behaviors
 
         public float OpenChestDelay { get; private set; } = 1f;
 
-        public float MaxSearchTime { get; set; } = 60f;
+        public float MaxSearchTime { get; set; } = 5f;
 
         public string StartState => "RR_SFIMain";
 
@@ -44,14 +44,14 @@ namespace FriendliesAI.Behaviors
             brain.Configure("RR_SFISearchItemsOnGround").SubstateOf("RR_SFIMain").Permit(this.FoundGroundItemTrigger.Trigger, "RR_SFIMoveToGroundItem").Permit("RR_SFIFailed", "RR_SFISearchForRandomContainer").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
             {
                 ItemDrop nearbyItem = Common.GetNearbyItem(this.m_aiBase.Instance, this.Items, this.m_searchRadius);
-                if ((UnityEngine.Object)nearbyItem != (UnityEngine.Object)null)
+                if (nearbyItem != null)
                 {
-                    this.m_aiBase.UpdateAiStatus("Look, there is a " + nearbyItem.m_itemData.m_shared.m_name + " on da grund");
+                    this.m_aiBase.UpdateAiStatus("Look, there is a " + nearbyItem.m_itemData.m_shared.m_name + " on the ground");
                     brain.Fire<ItemDrop>(this.FoundGroundItemTrigger, nearbyItem);
                 }
                 else
                 {
-                    this.m_aiBase.UpdateAiStatus("I seen nottin on da ground.");
+                    this.m_aiBase.UpdateAiStatus("I see nothing on the ground.");
                     brain.Fire("RR_SFIFailed");
                 }
             }));
@@ -64,7 +64,7 @@ namespace FriendliesAI.Behaviors
                     {
                         this.KnownContainers.Remove(container);
                         this.KnownContainers.Push(container);
-                        this.m_aiBase.UpdateAiStatus("I seen this in that a bin");
+                        this.m_aiBase.UpdateAiStatus("I saw this in that bin");
                         brain.Fire("RR_SFIContainerFound");
                         return;
                     }
@@ -78,7 +78,7 @@ namespace FriendliesAI.Behaviors
                 }
                 else
                 {
-                    this.m_aiBase.UpdateAiStatus("Me give up, nottin found!");
+                    this.m_aiBase.UpdateAiStatus("I give up, nothing found!");
                     this.KnownContainers.Clear();
                     this.m_aiBase.Brain.Fire("RR_SFIContainerNotFound");
                 }
@@ -103,7 +103,7 @@ namespace FriendliesAI.Behaviors
             {
                 this.FoundItem = this.m_groundItem.m_itemData;
                 int num;
-                if (!((UnityEngine.Object)this.m_groundItem == (UnityEngine.Object)null))
+                if (!(this.m_groundItem == null))
                 {
                     ZNetView nview = Common.GetNView<ItemDrop>(this.m_groundItem);
                     num = nview != null ? (!nview.IsValid() ? 1 : 0) : 1;
@@ -148,7 +148,7 @@ namespace FriendliesAI.Behaviors
                     this.FoundItem = this.KnownContainers.Peek().GetInventory().GetAllItems().Where<ItemDrop.ItemData>((Func<ItemDrop.ItemData, bool>)(i => this.Items.Any<ItemDrop.ItemData>((Func<ItemDrop.ItemData, bool>)(it => i.m_shared.m_name == it.m_shared.m_name)))).RandomOrDefault<ItemDrop.ItemData>();
                     if (this.FoundItem != null)
                     {
-                        this.m_aiBase.UpdateAiStatus("Found " + this.FoundItem.m_shared.m_name + " in this a bin!");
+                        this.m_aiBase.UpdateAiStatus("Found " + this.FoundItem.m_shared.m_name + " in this bin!");
                         this.KnownContainers.Peek().GetInventory().RemoveItem(this.FoundItem, 1);
                         Common.Invoke<Container>((object)this.KnownContainers.Peek(), "Save");
                         Common.Invoke<Inventory>((object)this.KnownContainers.Peek().GetInventory(), "Changed");
@@ -156,7 +156,7 @@ namespace FriendliesAI.Behaviors
                     }
                     else
                     {
-                        this.m_aiBase.UpdateAiStatus("Nottin in this a bin..");
+                        this.m_aiBase.UpdateAiStatus("Nothing in this bin.");
                         brain.Fire("RR_SFIFailed");
                     }
                 }

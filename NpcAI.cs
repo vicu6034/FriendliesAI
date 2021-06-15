@@ -106,11 +106,12 @@ namespace FriendliesAI
             this.ConfigureFollow();
             this.ConfigureSearchForItems();
             this.ConfigureAssigned();
+            this.ConfigureWorkerAssigned();
             this.ConfigureFlee();
             this.ConfigureFight();
             this.ConfigureHungry();
             this.ConfigureMoveToWorkerAssignment();
-            this.ConfigureCheckWorkerAssignment();
+            this.ConfigureCheckingWorkerAssignment();
             this.ConfigureDoneWithWorkerAssignment();
             this.ConfigureUnloadToWorkerAssignment();
             StateGraph stateGraph = new StateGraph(this.Brain.GetInfo());
@@ -153,34 +154,23 @@ namespace FriendliesAI
         
         private void ConfigureHungry() => this.Brain.Configure("Hungry").SubstateOf("Root");
 
-        private void ConfigureIdle() => this.Brain.Configure("Idle").SubstateOf("Root").PermitIf("Hungry", this.eatingBehaviour.StartState, (Func<bool>)(() => this.eatingBehaviour.IsHungry(this.IsHurt)))
-            .PermitIf<(MonsterAI, float)>(this.UpdateTrigger, "Assigned", (Func<(MonsterAI, float), bool>)(arg =>
+        private void ConfigureIdle() => this.Brain.Configure("Idle").SubstateOf("Root").PermitIf("Hungry", this.eatingBehaviour.StartState, (Func<bool>)(() => this.eatingBehaviour.IsHungry(this.IsHurt))).Permit("NoWorkerTasks", "Assigned").Permit("HasWorkerTasks", "WorkerAssigned").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+        {
+            this.m_stuckInIdleTimer = 0.0f;
+            this.UpdateAiStatus("Nothing to do, bored");
+            AddNewAssignment(Instance.transform.position);
+            AddNewWorkerAssignment(Instance, this.m_assignmentA);
+            Random rand = new Random();
+            var rando = rand.Next(0, 2);
+            if (rando == 0)
             {
-                if ((double) (this.m_stuckInIdleTimer += 1) > 300.0)
-                {
-                    Common.Dbgl("m_startPosition = HomePosition");
-                    this.m_startPosition = this.HomePosition;
-                    this.m_stuckInIdleTimer = 0.0f;
-                }
-
-                if ((double) (this.m_searchForNewAssignmentTimer += arg.Item2) < 2.0)
-                    return false;
-                this.m_searchForNewAssignmentTimer = 0.0f;
-                Random rand = new Random();
-                if (rand.Next(0, 2) == 0)
-                {
-                    return this.AddNewAssignment(arg.Item1.transform.position);
-                }
-                else
-                {
-                    return this.AddNewWorkerAssignment((BaseAI) arg.Item1, this.m_assignmentA);
-                }
-            })).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+                this.Brain.Fire("HasWorkerTasks");
+            }
+            else 
             {
-                this.UpdateAiStatus("Nothing to do, bored");
-                this.m_stuckInIdleTimer = 0.0f;
-                this.m_startPosition = this.Instance.transform.position;
-            }));
+                this.Brain.Fire("NoWorkerTasks");
+            }
+        }));
 
         private void ConfigureFight() => this.Brain.Configure("Fight").SubstateOf("Root").Permit("Fight", this.fightBehaviour.StartState).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
         {
@@ -230,142 +220,124 @@ namespace FriendliesAI
 
         private void ConfigureAssigned()
         {
-            this.Brain.Configure("Assigned").SubstateOf("Idle").InitialTransition("MoveToAssignment").Permit("HasWorkerTasks", "WorkerAssigned").Permit("AssignmentTimedOut", "Idle").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
-            {
-                if ((this.m_assignmentA.Peek() != null))  //.NeedOre != null) || (this.m_assignmentA.Peek().NeedFuel != null))
+            this.Brain.Configure("Assigned").SubstateOf("Idle").InitialTransition("MoveToAssignment").Permit("AssignmentTimedOut", "Idle").OnEntry(
+                    (Action<StateMachine<string, string>.Transition>) (t =>
+                    {
+                        this.UpdateAiStatus("Looking for broken structures");
+                        this.m_assignedTimer = 0.0f;
+                    }));
+            this.Brain.Configure("MoveToAssignment").SubstateOf("Assigned").Permit("Failed", "Idle").PermitIf<(MonsterAI, float)>(this.UpdateTrigger, "CheckRepairState", (Func<(MonsterAI, float), bool>) (arg => this.MoveToAssignment(1))).OnEntry((Action<StateMachine<string, string>.Transition>) (t =>
+                    {
+                        ZNetView nview = Common.GetNView<Piece>(this.m_assignment.Peek());
+                        if (nview == null || !nview.IsValid())
+                        {
+                            this.Brain.Fire("Failed");
+                            this.m_assignment.Pop();
+                        }
+                        else
+                        {
+                            this.UpdateAiStatus("Moving to assignment " + this.m_assignment.Peek().m_name);
+                            this.m_closeEnoughTimer = 0.0f;
+                        }
+                    })).OnExit((Action<StateMachine<string, string>.Transition>) (t => this.StopMoving()));
+            this.Brain.Configure("TurnToFaceAssignment").SubstateOf("Assigned").PermitIf<(MonsterAI, float)>(this.UpdateTrigger, "CheckRepairState", (Func<(MonsterAI, float), bool>) (arg => Common.TurnToFacePosition((MobAIBase) this, this.m_assignment.Peek().transform.position)));
+            this.Brain.Configure("CheckRepairState").SubstateOf("Assigned").Permit("Failed", "Idle").Permit("RepairDone", "Idle").Permit("RepairNeeded", "RepairAssignment").OnEntry((Action<StateMachine<string, string>.Transition>) (t =>
+                    {
+                        ZNetView nview = Common.GetNView<Piece>(this.m_assignment.Peek());
+                        if (nview == null || !nview.IsValid())
+                        {
+                            this.Brain.Fire("Failed");
+                            this.m_assignment.Pop();
+                        }
+                        else
+                        {
+                            this.NView.InvokeRPC(ZNetView.Everybody, "RR_AddAssignment",
+                                (object) this.m_assignment.Peek().GetUniqueId());
+                            WearNTear component = this.m_assignment.Peek().GetComponent<WearNTear>();
+                            if (component == null)
+                            {
+                                this.Brain.Fire("Failed");
+                                this.m_assignment.Pop();
+                            }
+                            else if ((double) component.GetHealthPercentage() <= 0.95)
+                            {
+                                this.UpdateAiStatus("Hm, this needs fixing!");
+                                this.m_startPosition = this.Instance.transform.position;
+                                this.Brain.Fire("RepairNeeded");
+                            }
+                            else if (component.GetHealthPercentage() > 0.95)
+                            {
+                                this.UpdateAiStatus("The " + this.m_assignment.Peek().m_name +
+                                                    " does not need to be repaired yet");
+                                this.Brain.Fire("Failed");
+                            }
+                            else
+                            {
+                                this.UpdateAiStatus("The " + this.m_assignment.Peek().m_name + " is repaired");
+                                this.Brain.Fire("RepairDone");
+                            }
+                        }
+                    }));
+            bool hammerAnimationStarted = false;
+            this.Brain.Configure("RepairAssignment").SubstateOf("Assigned").Permit("Failed", "Idle").PermitIf<(MonsterAI, float)>(this.UpdateTrigger, "Idle", (Func<(MonsterAI, float), bool>) (args =>
                 {
-                    this.m_assignedTimer = 0;
-                    this.UpdateAiStatus("Switching to WorkerAI");
-                    this.Brain.Fire("HasWorkerTasks");
-                }
-                this.UpdateAiStatus("Looking for broken structures");
-                this.m_assignedTimer = 0.0f;
-            }));
-            this.Brain.Configure("MoveToAssignment").SubstateOf("Assigned").Permit("Failed", "Idle").PermitIf<(MonsterAI, float)>(this.UpdateTrigger, "CheckRepairState", (Func<(MonsterAI, float), bool>)(arg => this.MoveToAssignment(1))).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
-            {
-                ZNetView nview = Common.GetNView<Piece>(this.m_assignment.Peek());
-                if (nview == null || !nview.IsValid())
+                    this.m_repairTimer += args.Item2;
+                    if ((double) this.m_repairTimer < (double) this.RepairTimeout - 0.5)
+                        return false;
+                    if (!hammerAnimationStarted)
+                    {
+                        ZSyncAnimation zsyncAnimation =
+                            typeof(Character).GetField("m_zanim", BindingFlags.Instance | BindingFlags.NonPublic)
+                                .GetValue((object) this.Character) as ZSyncAnimation;
+                        ItemDrop.ItemData itemData = (this.Character as Humanoid).GetCurrentWeapon();
+                        if (itemData == null)
+                        {
+                            itemData = (this.Character as Humanoid).GetInventory().GetAllItems()
+                                .FirstOrDefault<ItemDrop.ItemData>();
+                            (this.Character as Humanoid).EquipItem(itemData);
+                        }
+
+                        zsyncAnimation.SetTrigger(itemData.m_shared.m_attack.m_attackAnimation);
+                        hammerAnimationStarted = true;
+                    }
+
+                    return (double) this.m_repairTimer >= (double) this.RepairTimeout;
+                })).OnEntry((Action<StateMachine<string, string>.Transition>) (t =>
                 {
-                    this.Brain.Fire("Failed");
-                    this.m_assignment.Pop();
-                }
-                else
-                {
-                    this.UpdateAiStatus("Moving to assignment " + this.m_assignment.Peek().m_name);
-                    this.m_closeEnoughTimer = 0.0f;
-                }
-            })).OnExit((Action<StateMachine<string, string>.Transition>)(t => this.StopMoving()));
-            this.Brain.Configure("TurnToFaceAssignment").SubstateOf("Assigned").PermitIf<(MonsterAI, float)>(this.UpdateTrigger, "CheckRepairState", (Func<(MonsterAI, float), bool>)(arg => Common.TurnToFacePosition((MobAIBase)this, this.m_assignment.Peek().transform.position)));
-            this.Brain.Configure("CheckRepairState").SubstateOf("Assigned").Permit("Failed", "Idle").Permit("RepairDone", "Idle").Permit("RepairNeeded", "RepairAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
-            {
-                ZNetView nview = Common.GetNView<Piece>(this.m_assignment.Peek());
-                if (nview == null || !nview.IsValid())
-                {
-                    this.Brain.Fire("Failed");
-                    this.m_assignment.Pop();
-                }
-                else
-                {
-                    this.NView.InvokeRPC(ZNetView.Everybody, "RR_AddAssignment", (object)this.m_assignment.Peek().GetUniqueId());
-                    WearNTear component = this.m_assignment.Peek().GetComponent<WearNTear>();
-                    if (component == null)
+                    ZNetView nview = Common.GetNView<Piece>(this.m_assignment.Peek());
+                    if (nview == null || !nview.IsValid())
                     {
                         this.Brain.Fire("Failed");
                         this.m_assignment.Pop();
                     }
-                    else if ((double)component.GetHealthPercentage() <= 0.95)
-                    {
-                        this.UpdateAiStatus("Hm, this needs fixing!");
-                        this.m_startPosition = this.Instance.transform.position;
-                        this.Brain.Fire("RepairNeeded");
-                    }
-                    else if (component.GetHealthPercentage() > 0.95)
-                    {
-                        this.UpdateAiStatus("The " + this.m_assignment.Peek().m_name + " does not need to be repaired yet");
-                        this.Brain.Fire("Failed");
-                    }
                     else
                     {
-                        this.UpdateAiStatus("The " + this.m_assignment.Peek().m_name + " is repaired");
-                        this.Brain.Fire("RepairDone");
+                        this.UpdateAiStatus("Fixing this " + this.m_assignment.Peek().m_name);
+                        this.m_repairTimer = 0.0f;
+                        hammerAnimationStarted = false;
                     }
-                }
-            }));
-            bool hammerAnimationStarted = false;
-            this.Brain.Configure("RepairAssignment").SubstateOf("Assigned").Permit("Failed", "Idle").PermitIf<(MonsterAI, float)>(this.UpdateTrigger, "Idle", (Func<(MonsterAI, float), bool>)(args =>
-            {
-                this.m_repairTimer += args.Item2;
-                if ((double)this.m_repairTimer < (double)this.RepairTimeout - 0.5)
-                    return false;
-                if (!hammerAnimationStarted)
+                })).OnExit((Action<StateMachine<string, string>.Transition>) (t =>
                 {
-                    ZSyncAnimation zsyncAnimation = typeof(Character).GetField("m_zanim", BindingFlags.Instance | BindingFlags.NonPublic).GetValue((object)this.Character) as ZSyncAnimation;
-                    ItemDrop.ItemData itemData = (this.Character as Humanoid).GetCurrentWeapon();
-                    if (itemData == null)
+                    int num;
+                    if (!(t.Trigger == "Failed"))
                     {
-                        itemData = (this.Character as Humanoid).GetInventory().GetAllItems().FirstOrDefault<ItemDrop.ItemData>();
-                        (this.Character as Humanoid).EquipItem(itemData);
+                        ZNetView nview = Common.GetNView<Piece>(this.m_assignment.Peek());
+                        num = nview != null ? (!nview.IsValid() ? 1 : 0) : 1;
                     }
-                    zsyncAnimation.SetTrigger(itemData.m_shared.m_attack.m_attackAnimation);
-                    hammerAnimationStarted = true;
-                }
-                return (double)this.m_repairTimer >= (double)this.RepairTimeout;
-            })).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
-            {
-                ZNetView nview = Common.GetNView<Piece>(this.m_assignment.Peek());
-                if (nview == null || !nview.IsValid())
-                {
-                    this.Brain.Fire("Failed");
-                    this.m_assignment.Pop();
-                }
-                else
-                {
-                    this.UpdateAiStatus("Fixing this " + this.m_assignment.Peek().m_name);
-                    this.m_repairTimer = 0.0f;
-                    hammerAnimationStarted = false;
-                }
-            })).OnExit((Action<StateMachine<string, string>.Transition>)(t =>
-            {
-                int num;
-                if (!(t.Trigger == "Failed"))
-                {
-                    ZNetView nview = Common.GetNView<Piece>(this.m_assignment.Peek());
-                    num = nview != null ? (!nview.IsValid() ? 1 : 0) : 1;
-                }
-                else
-                    num = 1;
-                if (num != 0)
-                    return;
-                this.m_stuckInIdleTimer = 0.0f;
-                Debug.LogWarning((object)("Trigger:" + t.Trigger));
-                Piece piece = this.m_assignment.Peek();
-                this.UpdateAiStatus("This " + this.m_assignment.Peek().m_name + " is good as new!");
-                WearNTear component = piece.GetComponent<WearNTear>();
-                if (!(bool)(UnityEngine.Object)component || !component.Repair())
-                    return;
-                piece.m_placeEffect.Create(piece.transform.position, piece.transform.rotation);
-            }));
-            this.Brain.Configure("WorkerAssigned").SubstateOf("Assigned").InitialTransition("MoveToWorkerAssignment").PermitIf("TakeDamage", "Fight", (Func<bool>)(() => (double)this.TimeSinceHurt < 20.0)).PermitIf("Follow", "Follow", (Func<bool>)(() => (bool)(UnityEngine.Object)(this.Instance as MonsterAI).GetFollowTarget())).PermitIf("Hungry", this.eatingBehaviour.StartState, (Func<bool>)(() => this.eatingBehaviour.IsHungry(this.IsHurt))).Permit("AssignmentTimedOut", "DoneWithWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
-            {
-                this.UpdateAiStatus("I'm on it Boss");
-                this.m_assignedTimer = 0.0f;
-                this.m_startPosition = this.Instance.transform.position;
-            })).OnExit((Action<StateMachine<string, string>.Transition>)(t =>
-            {
-                if (this.m_carrying == null)
-                    return;
-                (this.Character as Humanoid).DropItem((this.Character as Humanoid).GetInventory(), this.m_carrying, 1);
-                this.m_carrying = null;
-            }));
-            this.Brain.Configure("HaveAssignmentItem").SubstateOf("WorkerAssigned").Permit("ItemFound", "MoveToWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
-            {
-                this.UpdateAiStatus("Trying to Pickup " + this.searchForItemsBehaviour.FoundItem.m_shared.m_name);
-                ItemDrop.ItemData itemData = (this.Character as Humanoid).PickupPrefab(this.searchForItemsBehaviour.FoundItem.m_dropPrefab);
-                (this.Character as Humanoid).EquipItem(itemData);
-                this.m_carrying = itemData;
-                this.Brain.Fire("ItemFound");
-            }));
-            this.Brain.Configure("HaveNoAssignmentItem").SubstateOf("WorkerAssigned").PermitIf("ItemNotFound", "DoneWithWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t => this.Brain.Fire("ItemNotFound")));
+                    else
+                        num = 1;
+
+                    if (num != 0)
+                        return;
+                    this.m_stuckInIdleTimer = 0.0f;
+                    Debug.LogWarning((object) ("Trigger:" + t.Trigger));
+                    Piece piece = this.m_assignment.Peek();
+                    this.UpdateAiStatus("This " + this.m_assignment.Peek().m_name + " is good as new!");
+                    WearNTear component = piece.GetComponent<WearNTear>();
+                    if (!(bool) (UnityEngine.Object) component || !component.Repair())
+                        return;
+                    piece.m_placeEffect.Create(piece.transform.position, piece.transform.rotation);
+                }));
         }
 
         public bool MoveToAssignment(float dt)
@@ -421,7 +393,7 @@ namespace FriendliesAI
             this.Brain.Fire("Hungry");
             this.Brain.Fire<(MonsterAI, float)>(this.UpdateTrigger, (instance, dt));
             this.m_assignedTimer += dt;
-            if (this.m_assignedTimer > CloseEnoughTimeout)
+            if (this.m_assignedTimer > 60f)
                 this.Brain.Fire("AssignmentTimedOut");
             if (this.Brain.IsInState("Follow"))
                 MobAIBase.Invoke<MonsterAI>((object)this.Instance, "Follow", (object)instance.GetFollowTarget(), (object)dt);
@@ -481,26 +453,50 @@ namespace FriendliesAI
             }
             return false;
         }
+
+        private void ConfigureWorkerAssigned()
+        {
+            this.Brain.Configure("WorkerAssigned").SubstateOf("Idle").InitialTransition("MoveToWorkerAssignment").PermitIf("TakeDamage", "Fight", (Func<bool>)(() => (double)this.TimeSinceHurt < 20.0)).PermitIf("Follow", "Follow", (Func<bool>)(() => (bool)(UnityEngine.Object)(this.Instance as MonsterAI).GetFollowTarget())).PermitIf("Hungry", this.eatingBehaviour.StartState, (Func<bool>)(() => this.eatingBehaviour.IsHungry(this.IsHurt))).Permit("AssignmentTimedOut", "DoneWithWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+            {
+                this.UpdateAiStatus("I'm on it Boss");
+                this.m_assignedTimer = 0.0f;
+                this.m_startPosition = this.Instance.transform.position;
+            })).OnExit((Action<StateMachine<string, string>.Transition>)(t =>
+            {
+                if (this.m_carrying == null)
+                    return;
+                (this.Character as Humanoid).DropItem((this.Character as Humanoid).GetInventory(), this.m_carrying, 1);
+                this.m_carrying = (ItemDrop.ItemData)null;
+            }));
+            this.Brain.Configure("HaveAssignmentItem").SubstateOf("WorkerAssigned").Permit("ItemFound", "MoveToWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+            {
+                this.UpdateAiStatus("Trying to Pickup " + this.searchForItemsBehaviour.FoundItem.m_shared.m_name);
+                ItemDrop.ItemData itemData = (this.Character as Humanoid).PickupPrefab(this.searchForItemsBehaviour.FoundItem.m_dropPrefab);
+                (this.Character as Humanoid).EquipItem(itemData);
+                this.m_carrying = itemData;
+                this.Brain.Fire("ItemFound");
+            }));
+            this.Brain.Configure("HaveNoAssignmentItem").SubstateOf("WorkerAssigned").PermitIf("ItemNotFound", "DoneWithWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t => this.Brain.Fire("ItemNotFound")));
+        }
+
         private void ConfigureMoveToWorkerAssignment()
         {
             string nextState = "Idle";
-            this.Brain.Configure("MoveToWorkerAssignment").SubstateOf("WorkerAssigned").Permit("AssignmentTimedOut", "DoneWithWorkerAssignment").PermitDynamicIf<(MonsterAI, float)>(this.UpdateTrigger, (Func<(MonsterAI, float), string>)(args => nextState), (Func<(MonsterAI, float), bool>)(arg => this.MoveToWorkerAssignment(arg.Item2))).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+            this.Brain.Configure("MoveToWorkerAssignment").SubstateOf("WorkerAssigned").PermitDynamicIf<(MonsterAI, float)>(this.UpdateTrigger, (Func<(MonsterAI, float), string>)(args => nextState), (Func<(MonsterAI, float), bool>)(arg => this.MoveToWorkerAssignment(arg.Item2))).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
             {
                 this.UpdateAiStatus("Moving to assignment " + this.m_assignmentA.Peek().TypeOfAssignment.Name);
-                this.m_assignedTimer = 0.0f;
                 this.m_closeEnoughTimer = 0.0f;
                 if (t.Source == "HaveAssignmentItem")
                     nextState = "UnloadToWorkerAssignment";
                 else
-                    nextState = "CheckWorkerAssignment";
-
+                    nextState = "CheckingWorkerAssignment";
             }));
         }
-        private void ConfigureCheckWorkerAssignment() => this.Brain.Configure("CheckWorkerAssignment").SubstateOf("WorkerAssigned").Permit(this.LookForItemTrigger.Trigger, "SearchForItems").Permit("AssignmentFinished", "DoneWithWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+
+        private void ConfigureCheckingWorkerAssignment() => this.Brain.Configure("CheckingWorkerAssignment").SubstateOf("WorkerAssigned").Permit(this.LookForItemTrigger.Trigger, "SearchForItems").Permit("WorkerAssignmentFinished", "DoneWithWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
         {
             this.StopMoving();
-            this.UpdateAiStatus("Checking asssignment for task");
-
+            this.UpdateAiStatus("Checking assignment for task");
             ItemDrop.ItemData needFuel = this.m_assignmentA.Peek().NeedFuel;
             IEnumerable<ItemDrop.ItemData> needOre = this.m_assignmentA.Peek().NeedOre;
             List<ItemDrop.ItemData> source = new List<ItemDrop.ItemData>();
@@ -516,15 +512,14 @@ namespace FriendliesAI
                 this.UpdateAiStatus("Adding " + needOre.Join<ItemDrop.ItemData>((Func<ItemDrop.ItemData, string>)(o => o.m_shared.m_name)) + " to search list");
             }
             if (!source.Any<ItemDrop.ItemData>())
-                this.Brain.Fire("AssignmentFinished");
+                this.Brain.Fire("WorkerAssignmentFinished");
             else
                 this.Brain.Fire<IEnumerable<ItemDrop.ItemData>, string, string>(this.LookForItemTrigger, (IEnumerable<ItemDrop.ItemData>)source, "HaveAssignmentItem", "HaveNoAssignmentItem");
         }));
 
-        private void ConfigureUnloadToWorkerAssignment() => this.Brain.Configure("UnloadToWorkerAssignment").SubstateOf("WorkerAssigned").Permit("AssignmentFinished", "CheckWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+        private void ConfigureUnloadToWorkerAssignment() => this.Brain.Configure("UnloadToWorkerAssignment").SubstateOf("WorkerAssigned").Permit("WorkerAssignmentFinished", "CheckingWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
         {
             this.StopMoving();
-            this.UpdateAiStatus("State: UnloadWorkerAssignment");
             ItemDrop.ItemData needFuel = this.m_assignmentA.Peek().NeedFuel;
             IEnumerable<ItemDrop.ItemData> needOre = this.m_assignmentA.Peek().NeedOre;
             bool flag1 = this.m_carrying.m_shared.m_name == needFuel?.m_shared?.m_name;
@@ -548,10 +543,10 @@ namespace FriendliesAI
             }
             (this.Character as Humanoid).UnequipItem(this.m_carrying, false);
             this.m_carrying = (ItemDrop.ItemData)null;
-            this.Brain.Fire("AssignmentFinished");
+            this.Brain.Fire("WorkerAssignmentFinished");
         }));
 
-        private void ConfigureDoneWithWorkerAssignment() => this.Brain.Configure("DoneWithWorkerAssignment").SubstateOf("WorkerAssigned").Permit("LeaveAssignment", "Idle").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+        private void ConfigureDoneWithWorkerAssignment() => this.Brain.Configure("DoneWithWorkerAssignment").SubstateOf("WorkerAssigned").Permit("LeaveWorkerAssignment", "Idle").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
         {
             if (this.m_carrying != null)
             {
@@ -561,12 +556,12 @@ namespace FriendliesAI
             }
             this.UpdateAiStatus("Done with assignment!");
             this.m_containers.Peek()?.SetInUse(false);
-            this.Brain.Fire("LeaveAssignment");
+            this.Brain.Fire("LeaveWorkerAssignment");
         }));
         public bool AddNewWorkerAssignment(BaseAI instance, MaxStack<Assignment> KnownAssignments)
         {
             Assignment nearbyAssignment = Common.FindRandomNearbyAssignment(instance, this.m_trainedAssignments, KnownAssignments, (float)(this.Awareness * 5));
-            if (nearbyAssignment == null)
+            if ((nearbyAssignment == null) || (nearbyAssignment == KnownAssignments.Peek()))
                 return false;
             KnownAssignments.Push(nearbyAssignment);
             return true;
@@ -652,12 +647,11 @@ namespace FriendliesAI
             public const string Failed = "Failed";
             public const string Fight = "Fight";
             public const string EnterEatBehaviour = "EnterEatBehaviour";
-            public const string IsCloseToWorkerAssignment = "IsCloseToWorkerAssignment";
             public const string WorkerAssignmentFinished = "WorkerAssignmentFinished";
             public const string LeaveWorkerAssignment = "LeaveWorkerAssignment";
             public const string HasWorkerTasks = "HasWorkerTasks";
-            public const string AssignmentFinished = "AssignmentFinished";
-            public const string LeaveAssignment = "LeaveAssignment";
+            public const string NoWorkerTasks = "NoWorkerTasks";
+            public const string Bored = "Bored";
         }
     }
 }

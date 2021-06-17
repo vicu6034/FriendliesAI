@@ -5,7 +5,7 @@ using RagnarsRokare.MobAI;
 
 namespace FriendliesAI.Behaviors
 {
-    internal class FightBehaviour : IBehaviour
+    internal class FightBehaviourF : IBehaviour
     {
         private const string Prefix = "RR_FIGHT";
         public float m_mobilityLevel;

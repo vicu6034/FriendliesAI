@@ -31,9 +31,9 @@ namespace FriendliesAI
         private readonly StateMachine<string, string>.TriggerWithParameters<(MonsterAI instance, float dt)> UpdateTrigger;
         //private readonly StateMachine<string, string>.TriggerWithParameters<(MonsterAI instance, float dt)> workerUpdateTrigger;
         private readonly StateMachine<string, string>.TriggerWithParameters<IEnumerable<ItemDrop.ItemData>, string, string> LookForItemTrigger;
-        private readonly SearchForItemsBehaviour searchForItemsBehaviour;
-        private readonly FightBehaviour fightBehaviour;
-        private readonly EatingBehaviour eatingBehaviour;
+        private readonly SearchForItemsBehaviourF searchForItemsBehaviorF;
+        private readonly FightBehaviourF fightBehaviorF;
+        private readonly EatingBehaviorF eatingBehaviorF;
         private readonly NpcAIConfig m_config;
         private string m_lastState = "";
 
@@ -88,18 +88,18 @@ namespace FriendliesAI
             this.m_assignmentA = new MaxStack<Assignment>(this.Intelligence);
             this.m_containers = new MaxStack<Container>(this.Intelligence);
             this.m_carrying = null;
-            this.searchForItemsBehaviour = new SearchForItemsBehaviour();
-            this.searchForItemsBehaviour.Configure((MobAIBase)this, this.Brain, "SearchForItems");
-            this.fightBehaviour = new FightBehaviour();
-            this.fightBehaviour.Configure((MobAIBase)this, this.Brain, "Fight");
-            this.eatingBehaviour = new EatingBehaviour();
-            this.eatingBehaviour.Configure((MobAIBase)this, this.Brain, "Hungry");
+            this.searchForItemsBehaviorF = new SearchForItemsBehaviourF();
+            this.searchForItemsBehaviorF.Configure((MobAIBase)this, this.Brain, "SearchForItems");
+            this.fightBehaviorF = new FightBehaviourF();
+            this.fightBehaviorF.Configure((MobAIBase)this, this.Brain, "Fight");
+            this.eatingBehaviorF = new EatingBehaviorF();
+            this.eatingBehaviorF.Configure((MobAIBase)this, this.Brain, "Hungry");
             //this.eatingBehaviour.HungryTimeout = (float)this.m_config.PostTameFeedDuration;
-            this.eatingBehaviour.HungryTimeout = 500f;
-            this.eatingBehaviour.SearchForItemsState = "SearchForItems";
-            this.eatingBehaviour.SuccessState = "Idle";
-            this.eatingBehaviour.FailState = "Idle";
-            this.eatingBehaviour.HealPercentageOnConsume = 0.1f;
+            this.eatingBehaviorF.HungryTimeout = 500f;
+            this.eatingBehaviorF.SearchForItemsState = "SearchForItems";
+            this.eatingBehaviorF.SuccessState = "Idle";
+            this.eatingBehaviorF.FailState = "Idle";
+            this.eatingBehaviorF.HealPercentageOnConsume = 0.1f;
             this.m_trainedAssignments.AddRange((IEnumerable<string>)this.NView.GetZDO().GetString("RR_trainedAssignments").Split());
             this.ConfigureRoot();
             this.ConfigureIdle();
@@ -153,7 +153,7 @@ namespace FriendliesAI
         
         private void ConfigureHungry() => this.Brain.Configure("Hungry").SubstateOf("Root");
 
-        private void ConfigureIdle() => this.Brain.Configure("Idle").SubstateOf("Root").PermitIf("Hungry", this.eatingBehaviour.StartState, (Func<bool>)(() => this.eatingBehaviour.IsHungry(this.IsHurt)))
+        private void ConfigureIdle() => this.Brain.Configure("Idle").SubstateOf("Root").PermitIf("Hungry", this.eatingBehaviorF.StartState, (Func<bool>)(() => this.eatingBehaviorF.IsHungry(this.IsHurt)))
             .PermitIf<(MonsterAI, float)>(this.UpdateTrigger, "Assigned", (Func<(MonsterAI, float), bool>)(arg =>
             {
                 if ((double) (this.m_stuckInIdleTimer += 1) > 300.0)
@@ -182,13 +182,13 @@ namespace FriendliesAI
                 this.m_startPosition = this.Instance.transform.position;
             }));
 
-        private void ConfigureFight() => this.Brain.Configure("Fight").SubstateOf("Root").Permit("Fight", this.fightBehaviour.StartState).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+        private void ConfigureFight() => this.Brain.Configure("Fight").SubstateOf("Root").Permit("Fight", this.fightBehaviorF.StartState).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
         {
-            this.fightBehaviour.SuccessState = "Idle";
-            this.fightBehaviour.FailState = "Flee";
-            this.fightBehaviour.m_mobilityLevel = (float)this.Mobility;
-            this.fightBehaviour.m_agressionLevel = (float)this.Agressiveness;
-            this.fightBehaviour.m_awarenessLevel = (float)this.Awareness;
+            this.fightBehaviorF.SuccessState = "Idle";
+            this.fightBehaviorF.FailState = "Flee";
+            this.fightBehaviorF.m_mobilityLevel = (float)this.Mobility;
+            this.fightBehaviorF.m_agressionLevel = (float)this.Agressiveness;
+            this.fightBehaviorF.m_awarenessLevel = (float)this.Awareness;
             this.Brain.Fire("Fight");
         })).OnExit((Action<StateMachine<string, string>.Transition>)(t =>
         {
@@ -215,16 +215,16 @@ namespace FriendliesAI
             this.UpdateAiStatus("Follow");
             this.Attacker = (Character)null;
             MobAIBase.Invoke<MonsterAI>((object)this.Instance, "SetAlerted", (object)false);
-        })).OnExit((Action<StateMachine<string, string>.Transition>)(t => this.HomePosition = this.m_startPosition = this.eatingBehaviour.LastKnownFoodPosition = this.Instance.transform.position));
+        })).OnExit((Action<StateMachine<string, string>.Transition>)(t => this.HomePosition = this.m_startPosition = this.eatingBehaviorF.LastKnownFoodPosition = this.Instance.transform.position));
 
-        private void ConfigureSearchForItems() => this.Brain.Configure("SearchForItems").SubstateOf("Root").Permit("SearchForItems", this.searchForItemsBehaviour.StartState).Permit("ShoutedAt", "MoveAwayFrom").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+        private void ConfigureSearchForItems() => this.Brain.Configure("SearchForItems").SubstateOf("Root").Permit("SearchForItems", this.searchForItemsBehaviorF.StartState).Permit("ShoutedAt", "MoveAwayFrom").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
         {
-            this.searchForItemsBehaviour.KnownContainers = this.m_containers;
-            this.searchForItemsBehaviour.Items = t.Parameters[0] as IEnumerable<ItemDrop.ItemData>;
-            //this.searchForItemsBehaviour.AcceptedContainerNames = this.m_config.IncludedContainers;
-            this.searchForItemsBehaviour.AcceptedContainerNames = new String[1]{"piece_chest_wood"};
-            this.searchForItemsBehaviour.SuccessState = t.Parameters[1] as string;
-            this.searchForItemsBehaviour.FailState = t.Parameters[2] as string;
+            this.searchForItemsBehaviorF.KnownContainers = this.m_containers;
+            this.searchForItemsBehaviorF.Items = t.Parameters[0] as IEnumerable<ItemDrop.ItemData>;
+            //this.searchForItemsBehavior.AcceptedContainerNames = this.m_config.IncludedContainers;
+            this.searchForItemsBehaviorF.AcceptedContainerNames = new String[1]{"piece_chest_wood"};
+            this.searchForItemsBehaviorF.SuccessState = t.Parameters[1] as string;
+            this.searchForItemsBehaviorF.FailState = t.Parameters[2] as string;
             this.Brain.Fire("SearchForItems");
         }));
 
@@ -345,7 +345,7 @@ namespace FriendliesAI
                     return;
                 piece.m_placeEffect.Create(piece.transform.position, piece.transform.rotation);
             }));
-            this.Brain.Configure("WorkerAssigned").SubstateOf("Assigned").InitialTransition("MoveToWorkerAssignment").PermitIf("TakeDamage", "Fight", (Func<bool>)(() => (double)this.TimeSinceHurt < 20.0)).PermitIf("Follow", "Follow", (Func<bool>)(() => (bool)(UnityEngine.Object)(this.Instance as MonsterAI).GetFollowTarget())).PermitIf("Hungry", this.eatingBehaviour.StartState, (Func<bool>)(() => this.eatingBehaviour.IsHungry(this.IsHurt))).Permit("AssignmentTimedOut", "DoneWithWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
+            this.Brain.Configure("WorkerAssigned").SubstateOf("Assigned").InitialTransition("MoveToWorkerAssignment").PermitIf("TakeDamage", "Fight", (Func<bool>)(() => (double)this.TimeSinceHurt < 20.0)).PermitIf("Follow", "Follow", (Func<bool>)(() => (bool)(UnityEngine.Object)(this.Instance as MonsterAI).GetFollowTarget())).PermitIf("Hungry", this.eatingBehaviorF.StartState, (Func<bool>)(() => this.eatingBehaviorF.IsHungry(this.IsHurt))).Permit("AssignmentTimedOut", "DoneWithWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
             {
                 this.UpdateAiStatus("I'm on it Boss");
                 this.m_assignedTimer = 0.0f;
@@ -359,8 +359,8 @@ namespace FriendliesAI
             }));
             this.Brain.Configure("HaveAssignmentItem").SubstateOf("WorkerAssigned").Permit("ItemFound", "MoveToWorkerAssignment").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
             {
-                this.UpdateAiStatus("Trying to Pickup " + this.searchForItemsBehaviour.FoundItem.m_shared.m_name);
-                ItemDrop.ItemData itemData = (this.Character as Humanoid).PickupPrefab(this.searchForItemsBehaviour.FoundItem.m_dropPrefab);
+                this.UpdateAiStatus("Trying to Pickup " + this.searchForItemsBehaviorF.FoundItem.m_shared.m_name);
+                ItemDrop.ItemData itemData = (this.Character as Humanoid).PickupPrefab(this.searchForItemsBehaviorF.FoundItem.m_dropPrefab);
                 (this.Character as Humanoid).EquipItem(itemData);
                 this.m_carrying = itemData;
                 this.Brain.Fire("ItemFound");
@@ -415,7 +415,7 @@ namespace FriendliesAI
                 return;
             this.m_triggerTimer = 0.0f;
             MonsterAI instance = this.Instance as MonsterAI;
-            this.eatingBehaviour.Update((MobAIBase)this, dt);
+            this.eatingBehaviorF.Update((MobAIBase)this, dt);
             this.Brain.Fire("Follow");
             this.Brain.Fire("TakeDamage");
             this.Brain.Fire("Hungry");
@@ -431,10 +431,10 @@ namespace FriendliesAI
                 MobAIBase.Invoke<MonsterAI>((object)this.Instance, "Flee", (object)dt, (object)vector3);
             }
             else if (this.Brain.IsInState("SearchForItems"))
-                this.searchForItemsBehaviour.Update((MobAIBase)this, dt);
+                this.searchForItemsBehaviorF.Update((MobAIBase)this, dt);
             else if (this.Brain.IsInState("Fight"))
             {
-                this.fightBehaviour.Update((MobAIBase)this, dt);
+                this.fightBehaviorF.Update((MobAIBase)this, dt);
             }
             else
             {

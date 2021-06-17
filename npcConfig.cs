@@ -30,7 +30,7 @@ namespace FriendliesAI
             MaxContainersInMemory = Config.Bind<int>("General", "Npc_MaxContainersInMemory", 3, "How many containers NPCs should remember contents from");
             TimeBeforeAssignmentCanBeRepeated = Config.Bind<int>("General", "Npc_TimeBeforeAssignmentCanBeRepeated", 120, "How long before assignment can be done again");
             TimeLimitOnAssignment = Config.Bind<int>("General", "Npc_TimeLimitOnAssignment", 60, "How long before moving on to next assignment");
-            PreTameConsumables = (IEnumerable<string>)NpcConfig.TamingItemList.Value.Split(',');
+            PreTameConsumables = (IEnumerable<string>)"Coins".Split(',');
             PostTameConsumables = (IEnumerable<string>)"CookedMeat".Split(',');
         }
     }

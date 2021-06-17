@@ -74,8 +74,9 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Behaviors\FightBehavior.cs" />
-    <Compile Include="Behaviors\SearchForItemsBehavior.cs" />
+    <Compile Include="Behaviors\EatingBehaviorF.cs" />
+    <Compile Include="Behaviors\FightBehaviorF.cs" />
+    <Compile Include="Behaviors\SearchForItemsBehaviorF.cs" />
     <Compile Include="MobConfig.cs" />
     <Compile Include="MobConfigManager.cs" />
     <Compile Include="NpcAI.cs" />

@@ -10,7 +10,7 @@ namespace FriendliesAI
         public static bool IsControllableMob(string mobType)
         {
             string prefabName = Common.GetPrefabName(mobType);
-            return prefabName == "RRRN_Tester" || prefabName == "RRRN_Tester2" || prefabName == "RRRN_Friendly05" || prefabName == "RRRN_Friendly1" || prefabName == "RRRN_Friendly15" || prefabName == "RRRN_Friendly2" || prefabName == "RRRN_Friendly25" || prefabName == "RRRN_Friendly3" || prefabName == "RRRN_Friendly35" || prefabName == "RRRN_Friendly4" || prefabName == "RRRN_Friendly45" || prefabName == "RRRN_FriendlyMelee_Fem_0" || prefabName == "RRRN_FriendlyMelee_Male_0";
+            return ((prefabName == "RRRN_Tester") || (prefabName == "RRRN_Tester2") || (prefabName == "RRRN_Friendly05") || (prefabName == "RRRN_Friendly1") || (prefabName == "RRRN_Friendly15") || (prefabName == "RRRN_Friendly2") || (prefabName == "RRRN_Friendly25") || (prefabName == "RRRN_Friendly3") || (prefabName == "RRRN_Friendly35") || (prefabName == "RRRN_Friendly4") || (prefabName == "RRRN_Friendly45") || (prefabName == "RRRN_FriendlyMelee_Fem_0") || (prefabName == "RRRN_FriendlyMelee_Male_0"));
         }
 
         public static MobConfig GetMobConfig(string mobType)
@@ -18,7 +18,7 @@ namespace FriendliesAI
             string prefabName = Common.GetPrefabName(mobType);
             
             if (!(IsControllableMob(prefabName)))
-                return (MobConfig)null;
+                return null;
             return new MobConfig()
             {
                 /*

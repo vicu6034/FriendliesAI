@@ -13,7 +13,7 @@ using UnityEngine.UI;
 
 namespace FriendliesAI
 {
-    [BepInPlugin("som.FriendliesAI", "FriendliesAI", "0.0.2")]
+    [BepInPlugin("som.FriendliesAI", "FriendliesAI", "0.0.5")]
     [BepInDependency("som.Friendlies")]
     [BepInDependency("RagnarsRokare.MobAILib")]
 
@@ -21,7 +21,7 @@ namespace FriendliesAI
     {
         private const string GUID = "som.FriendliesAI";
         private const string NAME = "FriendliesAI";
-        private const string VERSION = "0.0.2";
+        private const string VERSION = "0.0.5";
         internal static ManualLogSource log;
 
         private void Awake()

@@ -7,7 +7,7 @@ using RagnarsRokare.MobAI;
 
 namespace FriendliesAI.Behaviors
 {
-    internal class SearchForItemsBehaviour : IBehaviour
+    internal class SearchForItemsBehaviourF : IBehaviour
     {
         private const string Prefix = "RR_SFI";
         private StateMachine<string, string>.TriggerWithParameters<ItemDrop> FoundGroundItemTrigger;

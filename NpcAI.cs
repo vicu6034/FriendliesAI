@@ -184,8 +184,25 @@ namespace FriendliesAI
 
         private void ConfigureFight() => this.Brain.Configure("Fight").SubstateOf("Root").Permit("Fight", this.fightBehaviorF.StartState).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
         {
+            
             this.fightBehaviorF.SuccessState = "Idle";
             this.fightBehaviorF.FailState = "Flee";
+            
+            /*
+            GameObject[] weapons = new GameObject[];
+
+            foreach (GameObject gameObject in this.Character.GetComponent<Humanoid>().m_randomWeapon)
+            {
+                if ((gameObject.GetComponent<ItemDrop>().m_itemData.m_shared.m_name == "Bow") ||
+                    (gameObject.GetComponent<ItemDrop>().m_itemData.m_shared.m_name == "BowFineWood") ||
+                    (gameObject.GetComponent<ItemDrop>().m_itemData.m_shared.m_name == "BowHuntsman") ||
+                    (gameObject.GetComponent<ItemDrop>().m_itemData.m_shared.m_name == "BowDraugrFang"))
+                {
+
+                }
+            }
+            */
+            
             this.fightBehaviorF.m_mobilityLevel = (float)this.Mobility;
             this.fightBehaviorF.m_agressionLevel = (float)this.Agressiveness;
             this.fightBehaviorF.m_awarenessLevel = (float)this.Awareness;

@@ -48,7 +48,7 @@ namespace FriendliesAI
                 if (hit.GetAttacker() == null)
                     return;
                 Character attacker = hit.GetAttacker();
-                if ((UnityEngine.Object) attacker != (UnityEngine.Object) null && attacker.IsPlayer())
+                if ( attacker != null && attacker.IsPlayer())
                     hit.m_damage.Modify(0.1f);
             }
         }

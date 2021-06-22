@@ -13,7 +13,7 @@ using UnityEngine.UI;
 
 namespace FriendliesAI
 {
-    [BepInPlugin("som.FriendliesAI", "FriendliesAI", "0.0.5")]
+    [BepInPlugin("som.FriendliesAI", "FriendliesAI", "0.0.7")]
     [BepInDependency("som.Friendlies")]
     [BepInDependency("RagnarsRokare.MobAILib")]
 
@@ -21,7 +21,7 @@ namespace FriendliesAI
     {
         private const string GUID = "som.FriendliesAI";
         private const string NAME = "FriendliesAI";
-        private const string VERSION = "0.0.5";
+        private const string VERSION = "0.0.7";
         internal static ManualLogSource log;
 
         private void Awake()
@@ -43,11 +43,20 @@ namespace FriendliesAI
                 ref HitData hit)
             {
                 string uniqueId = ___m_nview.GetZDO().GetString("RR_CharId");
-                if (string.IsNullOrEmpty(uniqueId) || !MobManager.IsAliveMob(uniqueId))
-                    return;
                 if (hit.GetAttacker() == null)
                     return;
                 Character attacker = hit.GetAttacker();
+                var touse = 1800f;
+                if (___m_nview.GetZDO().GetFloat("TameTimeLeft", touse) < 1800f && attacker.IsTamed())
+                {
+                    hit.m_damage.Modify((0));
+                    return;
+                }
+                    
+
+                if (string.IsNullOrEmpty(uniqueId) || !MobManager.IsAliveMob(uniqueId))
+                    return;
+                
                 if ( attacker != null && attacker.IsPlayer())
                     hit.m_damage.Modify(0.1f);
             }
@@ -66,8 +75,7 @@ namespace FriendliesAI
                 //orAddTameable.m_tamingTime = mobConfig.TamingTime;
                 //orAddTameable.m_commandable = true;
                 AddVisualEquipmentCapability(__instance);
-                ___m_nview.Register<string, string>("RR_UpdateCharacterHUD",
-                    new Action<long, string, string>(RPC_UpdateCharacterName));
+                ___m_nview.Register<string, string>("RR_UpdateCharacterHUD", new Action<long, string, string>(RPC_UpdateCharacterName));
                 MonsterAI baseAi = __instance.GetBaseAI() as MonsterAI;
                 if (__instance.IsTamed())
                 {
@@ -86,7 +94,7 @@ namespace FriendliesAI
                     //baseAi.m_consumeItems.Clear();
                     //baseAi.m_consumeItems.AddRange(mobConfig.PostTameConsumables);
                     baseAi.m_randomMoveRange = 5f;
-                    baseAi.m_consumeSearchRange = (float) NpcConfig.ItemSearchRadius.Value;
+                    baseAi.m_consumeSearchRange = 15f;
                     string str = ___m_nview?.GetZDO()?.GetString("RR_GivenName");
                     if (!string.IsNullOrEmpty(str))
                         __instance.m_name = str;
@@ -152,8 +160,7 @@ namespace FriendliesAI
                 if (!dictionary.Contains((object) character))
                     return;
                 object obj = dictionary[(object) character];
-                Text text1 =
-                    obj.GetType().GetField("m_name", BindingFlags.Instance | BindingFlags.Public).GetValue(obj) as Text;
+                Text text1 = obj.GetType().GetField("m_name", BindingFlags.Instance | BindingFlags.Public).GetValue(obj) as Text;
                 if ((UnityEngine.Object) text1 == (UnityEngine.Object) null)
                     return;
                 text1.text = text;

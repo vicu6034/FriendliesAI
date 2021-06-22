@@ -8,7 +8,6 @@ using System.Reflection;
 using Stateless.Graph;
 using FriendliesAI.Behaviors;
 using HarmonyLib;
-using Random = System.Random;
 
 namespace FriendliesAI
 {
@@ -166,7 +165,7 @@ namespace FriendliesAI
                 if ((double) (this.m_searchForNewAssignmentTimer += arg.Item2) < 2.0)
                     return false;
                 this.m_searchForNewAssignmentTimer = 0.0f;
-                Random rand = new Random();
+                System.Random rand = new System.Random();
                 if (rand.Next(0, 2) == 0)
                 {
                     return this.AddNewAssignment(arg.Item1.transform.position);
@@ -214,7 +213,6 @@ namespace FriendliesAI
                 (this.Character as Humanoid).UnequipItem(currentWeapon);
             MobAIBase.Invoke<MonsterAI>((object)this.Instance, "SetAlerted", (object)false);
         }));
-
 
         private void ConfigureFlee() => this.Brain.Configure("Flee").SubstateOf("Root").PermitIf<(MonsterAI, float)>(this.UpdateTrigger, "Idle", (Func<(MonsterAI, float), bool>)(args => Common.Alarmed((BaseAI)args.Item1, (float)Mathf.Max(1, this.Awareness - 1)))).OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
         {
@@ -444,8 +442,9 @@ namespace FriendliesAI
                 MobAIBase.Invoke<MonsterAI>((object)this.Instance, "Follow", (object)instance.GetFollowTarget(), (object)dt);
             else if (this.Brain.IsInState("Flee"))
             {
-                Vector3 vector3 = (UnityEngine.Object)this.Attacker == (UnityEngine.Object)null ? this.Character.transform.position : this.Attacker.transform.position;
-                MobAIBase.Invoke<MonsterAI>((object)this.Instance, "Flee", (object)dt, (object)vector3);
+                var fleeFrom = Attacker == null ? Character.transform.position : Attacker.transform.position;
+                Invoke<MonsterAI>(Instance, "Flee", dt, fleeFrom);
+                return;
             }
             else if (this.Brain.IsInState("SearchForItems"))
                 this.searchForItemsBehaviorF.Update((MobAIBase)this, dt);

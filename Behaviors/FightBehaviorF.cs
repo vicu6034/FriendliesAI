@@ -26,7 +26,7 @@ namespace FriendliesAI.Behaviors
 
         public string StartState => "RR_FIGHTMain";
 
-        public bool IsBelowHealthThreshold(MobAIBase aiBase) => (double)aiBase.Character.GetHealthPercentage() < 1.0 - (double)this.m_agressionLevel * 0.08;
+        public bool IsBelowHealthThreshold(MobAIBase aiBase) => (double)aiBase.Character.GetHealthPercentage() < 0.3f;
 
         public void Configure(MobAIBase aiBase, StateMachine<string, string> brain, string parentState)
         {
@@ -46,7 +46,7 @@ namespace FriendliesAI.Behaviors
             brain.Configure("RR_FIGHTIdentifyEnemy").SubstateOf("RR_FIGHTMain").Permit("RR_FIGHTFoundTarget", "RR_FIGHTSelectWeapon").Permit("RR_FIGHTNoTarget", "RR_FIGHTDoneFighting").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
             {
                 this.m_searchTimer = this.m_agressionLevel * 2f;
-                if (!((UnityEngine.Object)aiBase.Attacker != (UnityEngine.Object)null) || !aiBase.Instance.CanSenseTarget(aiBase.Attacker))
+                if (!(aiBase.Attacker != null) || !aiBase.Instance.CanSenseTarget(aiBase.Attacker))
                     return;
                 aiBase.TargetCreature = aiBase.Attacker;
                 aiBase.Brain.Fire("RR_FIGHTFoundTarget");

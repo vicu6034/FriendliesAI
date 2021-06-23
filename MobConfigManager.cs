@@ -41,10 +41,7 @@ namespace FriendliesAI
                 //PreTameConsumables = NpcConfig.PreTameConsumables.Select<string, ItemDrop>((Func<string, ItemDrop>)(i => ObjectDB.instance.GetAllItems(ItemDrop.ItemData.ItemType.Material, i).FirstOrDefault<ItemDrop>())),
                 //PostTameConsumables = NpcConfig.PostTameConsumables.Select<string, ItemDrop>((Func<string, ItemDrop>)(i => ObjectDB.instance.GetAllItems(ItemDrop.ItemData.ItemType.Material, i).FirstOrDefault<ItemDrop>())),
                 TamingTime = 0,
-                AIConfig = JsonUtility.ToJson((object)new NpcAIConfig()
-                {
-                    InteractRange = 1
-                })
+                AIConfig = JsonUtility.ToJson((object)new MobAIBaseConfig())
             };
         }
     }

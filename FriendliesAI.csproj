@@ -77,7 +77,6 @@
     <Compile Include="MobConfig.cs" />
     <Compile Include="MobConfigManager.cs" />
     <Compile Include="NpcAI.cs" />
-    <Compile Include="NpcAIConfig.cs" />
     <Compile Include="npcConfig.cs" />
     <Compile Include="Plugin.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

@@ -33,7 +33,7 @@ namespace FriendliesAI
         private readonly SearchForItemsBehaviourF searchForItemsBehaviorF;
         private readonly FightBehaviourF fightBehaviorF;
         private readonly EatingBehaviorF eatingBehaviorF;
-        private readonly NpcAIConfig m_config;
+        private readonly MobAIBaseConfig m_config;
         private string m_lastState = "";
 
         public float CloseEnoughTimeout { get; private set; } = 10f;
@@ -58,7 +58,7 @@ namespace FriendliesAI
         public NpcAI(MonsterAI instance, MobAIBaseConfig config)
           : base((BaseAI)instance, "Idle", config)
         {
-            this.m_config = config as NpcAIConfig;
+            this.m_config = config as MobAIBaseConfig;
             this.m_containers = new MaxStack<Container>(this.Intelligence);
             if ((double)instance.m_consumeHeal == 0.0)
                 instance.m_consumeHeal = this.Character.GetMaxHealth() * 0.25f;
@@ -202,9 +202,9 @@ namespace FriendliesAI
             }
             */
             
-            this.fightBehaviorF.m_mobilityLevel = (float)this.Mobility;
-            this.fightBehaviorF.m_agressionLevel = (float)this.Agressiveness;
-            this.fightBehaviorF.m_awarenessLevel = (float)this.Awareness;
+            this.fightBehaviorF.m_mobilityLevel = this.Mobility;
+            this.fightBehaviorF.m_aggressionLevel = this.Agressiveness;
+            this.fightBehaviorF.m_awarenessLevel = this.Awareness;
             this.Brain.Fire("Fight");
         })).OnExit((Action<StateMachine<string, string>.Transition>)(t =>
         {
@@ -229,7 +229,7 @@ namespace FriendliesAI
         {
             this.UpdateAiStatus("Follow");
             this.Attacker = (Character)null;
-            MobAIBase.Invoke<MonsterAI>((object)this.Instance, "SetAlerted", (object)false);
+            MobAIBase.Invoke<MonsterAI>(this.Instance, "SetAlerted", false);
         })).OnExit((Action<StateMachine<string, string>.Transition>)(t => this.HomePosition = this.m_startPosition = this.eatingBehaviorF.LastKnownFoodPosition = this.Instance.transform.position));
 
         private void ConfigureSearchForItems() => this.Brain.Configure("SearchForItems").SubstateOf("Root").Permit("SearchForItems", this.searchForItemsBehaviorF.StartState).Permit("ShoutedAt", "MoveAwayFrom").OnEntry((Action<StateMachine<string, string>.Transition>)(t =>
@@ -615,7 +615,7 @@ namespace FriendliesAI
         {
             Name = "NpcAI",
             AIType = this.GetType(),
-            ConfigType = typeof(NpcAIConfig)
+            ConfigType = typeof(MobAIBaseConfig)
         };
 
         protected override void RPC_MobCommand(long sender, ZDOID playerId, string command)
